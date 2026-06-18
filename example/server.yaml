@@ -1,0 +1,38 @@
+# PaqetPremium server — foreign VPS / Kharej (exit point)
+# Deploy on Linux only. Requires root + libpcap + iptables rules on listen port.
+core: paqetpremium
+version: 2
+
+role: server
+name: kharej-exit-1
+
+log:
+  level: info
+
+listen:
+  addr: ":8888"
+
+network:
+  interface: eth0
+  ipv4:
+    addr: "10.0.0.100:8888"
+    router_mac: "aa:bb:cc:dd:ee:ff"
+  # Optional dual-stack:
+  # ipv6:
+  #   addr: "[2001:db8::100]:8888"
+  #   router_mac: "aa:bb:cc:dd:ee:ff"
+  tcp:
+    local_flag: ["PA"]
+
+transport:
+  protocol: kcp
+  conn: 6
+  kcp:
+    mode: fast
+    block: aes-128-gcm
+    key: CHANGE_ME_SECRET_KEY
+    mtu: 1150
+
+admin:
+  listen: "127.0.0.1:9090"
+  metrics: true

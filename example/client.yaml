@@ -1,0 +1,68 @@
+# PaqetPremium client — Iran VPS (entry point)
+# Deploy on Linux only. Requires root + libpcap.
+core: paqetpremium
+version: 2
+
+role: client
+name: iran-entry-1
+
+log:
+  level: info
+
+upstream:
+  strategy: failover
+  health_check:
+    interval: 10s
+    timeout: 3s
+    fail_threshold: 3
+    recover_threshold: 2
+  servers:
+    - name: de-fra-1
+      addr: 45.1.1.1:8888
+      key: CHANGE_ME_SECRET_KEY
+      weight: 3
+      priority: 1
+    - name: nl-ams-1
+      addr: 45.2.2.2:8888
+      key: CHANGE_ME_SECRET_KEY
+      weight: 1
+      priority: 2
+
+forward:
+  - listen: "0.0.0.0:443"
+    target: "127.0.0.1:443"
+    protocol: tcp
+    # bind_upstream: de-fra-1   # optional: pin to named upstream
+  - listen: "0.0.0.0:8443"
+    target: "127.0.0.1:8443"
+    protocol: tcp
+
+# Optional SOCKS5 instead of or alongside forward:
+# socks5:
+#   - listen: "127.0.0.1:1080"
+#     # auth:
+#     #   user: user
+#     #   pass: pass
+
+network:
+  interface: eth0
+  ipv4:
+    addr: "10.0.0.5:0"
+    router_mac: "aa:bb:cc:dd:ee:ff"
+  tcp:
+    local_flag: ["PA"]
+    remote_flag: ["PA"]
+
+transport:
+  protocol: kcp
+  conn: 6
+  kcp:
+    mode: fast
+    block: aes-128-gcm
+    key: CHANGE_ME_SECRET_KEY
+    mtu: 1150
+
+admin:
+  listen: "127.0.0.1:9090"
+  metrics: true
+  # token: "change-me"   # optional: protects status/reload/metrics
