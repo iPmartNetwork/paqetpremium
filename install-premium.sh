@@ -14,7 +14,7 @@
 #   sudo ./install-premium.sh add-tunnel   # add a named client instance
 #   sudo ./install-premium.sh status|list|logs|reload|restart|update|uninstall
 #
-set -Eeuo pipefail
+set -uo pipefail
 
 # --------------------------------------------------------------------------- #
 # Constants
@@ -54,7 +54,11 @@ warn() { printf '%s[!]%s %s\n' "$C_YLW" "$C_NC" "$*" >&2; }
 err()  { printf '%s[x]%s %s\n' "$C_RED" "$C_NC" "$*" >&2; exit 1; }
 hr()   { printf '%s%s%s\n' "$C_DIM" "------------------------------------------------------------" "$C_NC"; }
 
-trap 'err "aborted at line ${LINENO}: ${BASHCOMMAND}"' ERR
+# Note: this interactive installer deliberately does NOT use `set -e` or an ERR
+# trap. Many routine commands (network detection, `awk ... exit` pipelines that
+# raise SIGPIPE under pipefail, `systemctl is-active`, `grep` with no match)
+# legitimately return non-zero. Critical operations handle failure explicitly
+# with `|| err`.
 
 banner() {
   printf '%s\n' "$C_BLD"
@@ -144,9 +148,9 @@ install_go_tarball() {
   tar="go${GO_DL_VERSION}.linux-${arch}.tar.gz"
   url="https://go.dev/dl/${tar}"
   info "Downloading ${url}"
-  curl -fsSL "$url" -o "/tmp/${tar}"
+  curl -fsSL "$url" -o "/tmp/${tar}" || err "failed to download Go from ${url}"
   rm -rf /usr/local/go
-  tar -C /usr/local -xzf "/tmp/${tar}"
+  tar -C /usr/local -xzf "/tmp/${tar}" || err "failed to extract Go toolchain"
   rm -f "/tmp/${tar}"
   export PATH="/usr/local/go/bin:${PATH}"
   ok "Go $("/usr/local/go/bin/go" version | awk '{print $3}') installed to /usr/local/go."
@@ -165,12 +169,12 @@ acquire_source() {
   need_cmd git || { detect_pkg_mgr; pkg_install git; }
   if [[ -d "${SRC_DIR}/.git" ]]; then
     info "Updating existing source (${REPO_BRANCH})..."
-    git -C "${SRC_DIR}" fetch --depth 1 origin "${REPO_BRANCH}"
-    git -C "${SRC_DIR}" reset --hard "origin/${REPO_BRANCH}"
+    git -C "${SRC_DIR}" fetch --depth 1 origin "${REPO_BRANCH}" || err "git fetch failed"
+    git -C "${SRC_DIR}" reset --hard "origin/${REPO_BRANCH}" || err "git reset failed"
   else
     info "Cloning ${REPO_URL} (${REPO_BRANCH})..."
     mkdir -p "$(dirname "${SRC_DIR}")"
-    git clone --depth 1 --branch "${REPO_BRANCH}" "${REPO_URL}" "${SRC_DIR}"
+    git clone --depth 1 --branch "${REPO_BRANCH}" "${REPO_URL}" "${SRC_DIR}" || err "git clone failed"
   fi
   SRC="${SRC_DIR}"
 }
@@ -180,8 +184,10 @@ build_binary() {
   acquire_source
   local go; go="$(go_bin)"
   info "Building ${BIN_NAME} (CGO + libpcap)..."
-  ( cd "${SRC}" && CGO_ENABLED=1 "$go" build -trimpath -ldflags "-s -w" -o "/tmp/${BIN_NAME}" ./cmd/paqetpremium )
-  install -m 0755 "/tmp/${BIN_NAME}" "${BIN_DIR}/${BIN_NAME}"
+  if ! ( cd "${SRC}" && CGO_ENABLED=1 "$go" build -trimpath -ldflags "-s -w" -o "/tmp/${BIN_NAME}" ./cmd/paqetpremium ); then
+    err "build failed (ensure libpcap-dev and a C toolchain are installed)"
+  fi
+  install -m 0755 "/tmp/${BIN_NAME}" "${BIN_DIR}/${BIN_NAME}" || err "failed to install binary to ${BIN_DIR}"
   rm -f "/tmp/${BIN_NAME}"
   ok "Installed: ${BIN_DIR}/${BIN_NAME} ($(${BIN_DIR}/${BIN_NAME} version 2>/dev/null || echo "${BIN_NAME}"))"
 }
@@ -230,7 +236,9 @@ download_release_binary() {
   else
     warn "Checksum unavailable; skipping verification."
   fi
-  install -m 0755 "${tmp}/${asset}" "${BIN_DIR}/${BIN_NAME}"
+  if ! install -m 0755 "${tmp}/${asset}" "${BIN_DIR}/${BIN_NAME}"; then
+    rm -rf "$tmp"; return 1
+  fi
   rm -rf "$tmp"
   ok "Installed prebuilt: ${BIN_DIR}/${BIN_NAME} ($(${BIN_DIR}/${BIN_NAME} version 2>/dev/null || echo "${BIN_NAME}"))"
 }
@@ -531,7 +539,7 @@ wizard_server() {
   write_server_config "${CONFIG_DIR}/server.yaml"
   "${BIN_DIR}/${BIN_NAME}" test -c "${CONFIG_DIR}/server.yaml" || warn "Config test reported issues (live checks need a running peer)."
   install_service server
-  systemctl restart "${BIN_NAME}-server.service"
+  systemctl restart "${BIN_NAME}-server.service" || warn "service did not start cleanly; inspect: journalctl -u ${BIN_NAME}-server -e"
   healthcheck "${CFG_ADMIN}"
   hr
   ok "Server is up. Secret key: ${C_BLD}${CFG_KEY}${C_NC}"
@@ -557,7 +565,7 @@ wizard_client() {
   write_client_config "${CONFIG_DIR}/client.yaml"
   "${BIN_DIR}/${BIN_NAME}" test -c "${CONFIG_DIR}/client.yaml" || warn "Config test reported issues (live checks need a reachable server)."
   install_service client
-  systemctl restart "${BIN_NAME}-client.service"
+  systemctl restart "${BIN_NAME}-client.service" || warn "service did not start cleanly; inspect: journalctl -u ${BIN_NAME}-client -e"
   healthcheck "${CFG_ADMIN}"
   hr
   ok "Client is up."
@@ -585,7 +593,7 @@ wizard_add_tunnel() {
   CFG_NAME="$name"
   write_client_config "${TUNNELS_DIR}/${name}.yaml"
   systemctl enable "${BIN_NAME}-client@${name}.service" >/dev/null 2>&1 || true
-  systemctl restart "${BIN_NAME}-client@${name}.service"
+  systemctl restart "${BIN_NAME}-client@${name}.service" || warn "instance did not start cleanly; inspect: journalctl -u ${BIN_NAME}-client@${name} -e"
   ok "Tunnel '${name}' started (${BIN_NAME}-client@${name})."
 }
 
