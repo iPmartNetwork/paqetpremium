@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Installer per-tunnel management: `list tunnels` (detailed view with role, transport, upstream/forward/socks/range summary and live status), `edit [name]` (open a tunnel's config in $EDITOR, validate, and restart just that service), and `remove [name]` (delete a single tunnel's config + service without touching other tunnels or the binary). Available as menu items 4/5/6 and as `tunnels` / `edit` / `remove` subcommands.
 
+### Changed
+- Documentation (`README.md` / `README.fa.md`) updated to cover transparent all-ports range mode, configurable KCP FEC and windows, the web dashboard, per-tunnel management commands, `.deb`/`.rpm` packages, self-healing upstream reconnect, and UDP-protocol support; version badge bumped to 0.15.0 and the status/roadmap refreshed.
+
 ## [0.15.0] - 2026-06-19
 
 ### Added

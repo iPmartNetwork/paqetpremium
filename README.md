@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/platform-linux%20amd64%20%7C%20arm64-blue" alt="platform">
   <img src="https://img.shields.io/badge/go-1.25%2B-00ADD8?logo=go&logoColor=white" alt="go">
   <img src="https://img.shields.io/badge/transport-KCP%20%7C%20QUIC-success" alt="transport">
-  <img src="https://img.shields.io/badge/version-0.9.0-informational" alt="version">
+  <img src="https://img.shields.io/badge/version-0.15.0-informational" alt="version">
   <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="license">
 </p>
 
@@ -51,13 +51,16 @@ and **smux** for stream multiplexing. It is designed for a two-node deployment:
 
 - **Dual transport** — KCP (default, tuned for lossy links) or QUIC (TLS 1.3), selectable in config.
 - **Mutual authentication** — both transports authenticate peers from a shared secret. QUIC pins a deterministic, secret-derived certificate on both sides.
-- **Port forwarding** — TCP and UDP, per-rule upstream binding.
+- **Port forwarding** — TCP and UDP, per-rule upstream binding. UDP-based protocols (QUIC, Hysteria2, TUIC, WireGuard) work over UDP forwarding — datagram boundaries are preserved end-to-end.
+- **Transparent all-ports range mode** — a single client listener transparently tunnels an entire TCP port range (via iptables REDIRECT + `SO_ORIGINAL_DST`) to the server's localhost, with no per-port config and no server-side change.
 - **SOCKS5** — CONNECT (TCP) and UDP ASSOCIATE, with optional user/password auth.
 - **Multi-upstream** — `failover`, `round_robin`, `weighted`, `least_latency`, with health checks and automatic failover.
+- **Self-healing upstreams** — dead connection pools (server restart, network blip, keepalive timeout) are rebuilt out-of-band with backoff and marked healthy again once a ping succeeds — no client restart needed.
+- **Configurable KCP FEC** — optional forward error correction (`data_shard`/`parity_shard`) recovers lost packets without retransmits on lossy links; windows are tunable too.
 - **Hot reload** — client (upstream + forward + SOCKS5) and server (config + firewall) via `SIGHUP` or the admin API.
 - **IPv4 + optional IPv6** over the same crafted-TCP path.
-- **Admin API & metrics** — health, status, reload, and Prometheus metrics, with optional bearer-token auth.
-- **systemd-native** — single service or multiple named client instances.
+- **Admin API, metrics & web dashboard** — health, status, reload, Prometheus metrics, and a live dark-theme status page, with optional bearer-token auth.
+- **systemd-native** — single service or multiple named client instances, with per-tunnel list/edit/remove management.
 
 ## Requirements
 
@@ -90,6 +93,20 @@ git clone https://github.com/iPmartNetwork/paqetpremium
 cd paqetpremium
 sudo ./install-premium.sh            # interactive menu
 ```
+
+### Install from a package
+
+Tagged releases also publish `.deb` and `.rpm` packages for **amd64** and
+**arm64** (the package declares a `libpcap` dependency):
+
+```bash
+sudo dpkg -i paqetpremium_*.deb      # Debian/Ubuntu
+sudo rpm   -i paqetpremium-*.rpm     # RHEL/Fedora
+```
+
+Then run the installer for guided setup (`sudo ./install-premium.sh`) or start
+directly with `paqetpremium run -c <config>`. The one-line bootstrap above
+remains the primary install method.
 
 The installer detects your interface/IP/MAC, installs dependencies (and a recent
 Go toolchain if needed), builds the binary, writes the config, and sets up
@@ -132,11 +149,20 @@ sudo ./install-premium.sh reload client      # SIGHUP hot reload
 sudo ./install-premium.sh restart server
 sudo ./install-premium.sh update             # rebuild from repo and restart
 sudo ./install-premium.sh add-tunnel         # add a named client instance
+sudo ./install-premium.sh tunnels            # list configured tunnels with details
+sudo ./install-premium.sh edit   client      # edit a tunnel's config and restart it (server|client|<name>)
+sudo ./install-premium.sh remove mytunnel    # delete a single tunnel (config + service)
 sudo ./install-premium.sh uninstall
 ```
 
 Equivalent systemd units: `paqetpremium-server.service`, `paqetpremium-client.service`,
 and the templated `paqetpremium-client@<name>.service`.
+
+`tunnels`, `edit`, and `remove` are also available as menu items. `tunnels`
+lists every configured tunnel with its role, transport, upstream/forward/socks/range
+summary and live status; `edit` opens one tunnel's config, validates it, and
+restarts just that service; `remove` deletes a single tunnel's config and service
+without touching the other tunnels or the binary.
 
 ## Configuration
 
@@ -153,7 +179,18 @@ transport:
     block: aes-128-gcm
     key: SHARED_SECRET
     mtu: 1150
+    # optional forward error correction (off by default):
+    data_shard: 10      # FEC: recover lost packets without retransmit (default 0 = off)
+    parity_shard: 3     # both ends MUST match
+    snd_wnd: 1024       # optional window overrides
+    rcv_wnd: 1024
 ```
+
+FEC trades a little extra bandwidth for far fewer retransmits on lossy links
+(common on Iran↔abroad paths): a `data_shard: 10` / `parity_shard: 3` group
+recovers up to 3 lost packets without a round-trip. It is **off by default**,
+and both ends must use the **same** `data_shard`/`parity_shard`. `snd_wnd`/`rcv_wnd`
+are optional window overrides; leave them unset to keep the role-based defaults.
 
 ### QUIC
 
@@ -200,6 +237,31 @@ socks5:
     # auth: { user: alice, pass: secret }
 ```
 
+### Transparent all-ports range mode (client)
+
+```yaml
+range:
+  enabled: true
+  protocol: tcp           # tcp only (UDP transparent mode is planned)
+  redirect_port: 47999    # local listener that iptables REDIRECTs into
+  target_host: "127.0.0.1" # server-side host that services live on
+  ports: "1-65535"        # range/list to tunnel, e.g. "443,8443,2000-3000"
+  exclude: "22"           # never redirect these (keep SSH!)
+```
+
+With range mode enabled, any TCP connection to the client's IP on a port within
+`ports` is transparently tunneled to `target_host:<original-port>` on the server.
+The client installs an `iptables` nat REDIRECT into a single local listener and
+recovers each connection's original destination port via `SO_ORIGINAL_DST`, so
+you reach **any** port on the server's localhost through the entry IP without
+per-port configuration — and the server needs no change (its relay already dials
+the per-connection target). SSH (`22`) and the `redirect_port` are auto-excluded.
+The installer offers this as the **"Tunnel ALL inbound ports transparently"**
+wizard option.
+
+> **Security:** this exposes every localhost port on the server through the entry
+> IP. Keep sensitive ports (databases, the admin API, etc.) in `exclude`.
+
 ### IPv6 (optional)
 
 ```yaml
@@ -228,6 +290,19 @@ Enabled when `admin.listen` is set:
 
 Set `admin.token` to protect `/api/v1/*` and `/metrics` (not `/healthz`). Pass it
 as `Authorization: Bearer <token>` or `?token=<token>`.
+
+### Dashboard
+
+The admin server also serves a self-contained, dark-theme **live status page** at
+its root (`/`): download/upload throughput with per-second rates, active sessions,
+TCP/UDP and relay counters, error count, and a per-upstream health/RTT/sessions
+table, auto-refreshing every couple of seconds. Because admin binds to
+`127.0.0.1` by default, view it through an SSH tunnel:
+
+```bash
+ssh -L 9090:127.0.0.1:9090 root@<server>
+# then open http://localhost:9090  (append ?token=... if an admin token is set)
+```
 
 ## Security notes
 
@@ -265,8 +340,9 @@ Targets: **linux/amd64**, **linux/arm64**.
 
 ## Status & roadmap
 
-Core implementation is complete and unit-tested for the platform-independent
-paths; end-to-end testing on live VPSes is the remaining step before a `1.0.0` tag.
+Core implementation is complete, unit-tested, and exercised by an end-to-end
+integration suite in CI; real-world burn-in on live VPSes is the remaining step
+before a stable `1.0.0` tag.
 
 - [x] pcap engine, KCP transport, ping handshake
 - [x] port-forward, SOCKS5, session pool, iptables
@@ -274,7 +350,16 @@ paths; end-to-end testing on live VPSes is the remaining step before a `1.0.0` t
 - [x] admin API, metrics, IPv6, installer
 - [x] reload/bench CLI, admin auth, arm64
 - [x] QUIC transport with mutual certificate pinning
-- [ ] live VPS validation and `1.0.0` release
+- [x] UDP datagram framing (boundary-preserving relay)
+- [x] transparent TCP "all ports" range mode
+- [x] configurable KCP FEC and windows
+- [x] self-healing upstream reconnect
+- [x] web dashboard
+- [x] `.deb` / `.rpm` packages
+- [x] per-tunnel management (list/edit/remove)
+- [x] CI integration tests
+- [ ] transparent UDP (TPROXY) range mode
+- [ ] real-world burn-in and stable `1.0.0` release
 
 See [CHANGELOG.md](CHANGELOG.md) for release notes.
 
