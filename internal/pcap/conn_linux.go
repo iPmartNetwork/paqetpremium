@@ -5,6 +5,7 @@ package pcap
 import (
 	"context"
 	"errors"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -72,6 +73,16 @@ func (c *Conn) ReadFrom(buf []byte) (int, net.Addr, error) {
 		payload, addr, err := c.recv.read()
 		if err != nil {
 			if errors.Is(err, pcap.NextErrorTimeoutExpired) {
+				continue
+			}
+			if errors.Is(err, io.EOF) {
+				// Some libpcap builds in non-blocking/immediate mode report an
+				// idle poll (no packet ready) as io.EOF rather than a timeout.
+				// Treat it as benign and keep polling; the brief sleep prevents a
+				// busy loop. Real shutdown is handled by the ctx.Done() check at
+				// the top of the loop (Conn.Close cancels ctx before closing the
+				// handle), so this cannot spin forever on a closed conn.
+				time.Sleep(time.Millisecond)
 				continue
 			}
 			logReadErr.Do(func() {

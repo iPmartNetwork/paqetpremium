@@ -5,7 +5,10 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.9.2] - 2026-06-19
+
+### Fixed
+- pcap receive loop: tolerate `io.EOF` as a benign "no packet available" idle poll. Some libpcap builds in non-blocking/immediate mode return `io.EOF` (instead of a timeout) when no packet is ready; the loop previously treated this as fatal, which killed the kcp-go read loop on the very first idle poll, tore down the smux session (`io: read/write on closed pipe`), and stopped all transmission — so the server received zero packets and tunnels never established. This was the root cause of the "tunnel does not connect" failures on affected hosts.
 
 ### Added
 - Installer: redesigned interactive UI (richer 256-color theme, sectioned layout, confirmation summary cards, readiness cards) and a multi-upstream client wizard. You can now add several exit servers, each with its own public IP, port, key and priority/weight, and pick the load-balancing strategy (failover / round_robin / weighted / least_latency). The server address is entered as separate IP and port prompts. The same multi-upstream flow is available in the multi-instance "add-tunnel" wizard.
