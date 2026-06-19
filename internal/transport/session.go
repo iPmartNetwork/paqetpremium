@@ -7,14 +7,13 @@ import (
 	"net"
 	"time"
 
-	"github.com/paqetpremium/paqetpremium/internal/pcap"
 	"github.com/quic-go/quic-go"
 	"github.com/xtaci/kcp-go/v5"
 	"github.com/xtaci/smux"
 )
 
 type Session struct {
-	PacketConn *pcap.Conn
+	PacketConn net.PacketConn
 	remoteAddr net.Addr
 
 	KCP        *kcp.UDPSession
@@ -87,7 +86,7 @@ func smuxServer(conn io.ReadWriteCloser, opt Options) (*smux.Session, error) {
 	return sess, nil
 }
 
-func Dial(ctx context.Context, addr *net.UDPAddr, opt Options, pconn *pcap.Conn) (*Session, error) {
+func Dial(ctx context.Context, addr *net.UDPAddr, opt Options, pconn net.PacketConn) (*Session, error) {
 	switch opt.Protocol {
 	case ProtocolQUIC:
 		return dialQUIC(ctx, addr, opt, pconn)
@@ -96,7 +95,7 @@ func Dial(ctx context.Context, addr *net.UDPAddr, opt Options, pconn *pcap.Conn)
 	}
 }
 
-func dialKCP(addr *net.UDPAddr, opt Options, pconn *pcap.Conn) (*Session, error) {
+func dialKCP(addr *net.UDPAddr, opt Options, pconn net.PacketConn) (*Session, error) {
 	kcpConn, err := kcp.NewConn(addr.String(), opt.KCP.Block, 0, 0, pconn)
 	if err != nil {
 		return nil, fmt.Errorf("kcp dial: %w", err)
@@ -112,13 +111,13 @@ func dialKCP(addr *net.UDPAddr, opt Options, pconn *pcap.Conn) (*Session, error)
 }
 
 type Listener struct {
-	packetConn *pcap.Conn
+	packetConn net.PacketConn
 	opt        Options
 	kcpLn      *kcp.Listener
 	quicLn     *quicListener
 }
 
-func Listen(opt Options, pconn *pcap.Conn) (*Listener, error) {
+func Listen(opt Options, pconn net.PacketConn) (*Listener, error) {
 	switch opt.Protocol {
 	case ProtocolQUIC:
 		qln, err := listenQUIC(opt, pconn)

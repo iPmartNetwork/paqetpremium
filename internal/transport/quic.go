@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/paqetpremium/paqetpremium/internal/pcap"
 	"github.com/quic-go/quic-go"
 )
 
-func dialQUIC(ctx context.Context, addr *net.UDPAddr, opt Options, pconn *pcap.Conn) (*Session, error) {
+func dialQUIC(ctx context.Context, addr *net.UDPAddr, opt Options, pconn net.PacketConn) (*Session, error) {
 	tlsConf, err := tlsConfigFromSecret(opt.SecretKey, opt.QUIC.ALPN, false)
 	if err != nil {
 		return nil, fmt.Errorf("quic tls: %w", err)
@@ -53,13 +52,13 @@ func dialQUIC(ctx context.Context, addr *net.UDPAddr, opt Options, pconn *pcap.C
 }
 
 type quicListener struct {
-	packetConn *pcap.Conn
+	packetConn net.PacketConn
 	opt        Options
 	transport  *quic.Transport
 	listener   *quic.Listener
 }
 
-func listenQUIC(opt Options, pconn *pcap.Conn) (*quicListener, error) {
+func listenQUIC(opt Options, pconn net.PacketConn) (*quicListener, error) {
 	tlsConf, err := tlsConfigFromSecret(opt.SecretKey, opt.QUIC.ALPN, true)
 	if err != nil {
 		return nil, fmt.Errorf("quic tls: %w", err)
