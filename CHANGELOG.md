@@ -5,6 +5,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.15.0] - 2026-06-19
+
+### Added
+- Distribution packages: tagged releases now also publish `.deb` and `.rpm` packages for amd64 and arm64 (built with nfpm), alongside the raw binaries and SHA-256 checksums. The packages install `paqetpremium` to `/usr/local/bin`, declare a libpcap dependency, and bundle the example configs and docs under `/usr/share/doc/paqetpremium`. Install with `sudo dpkg -i paqetpremium_*.deb` (Debian/Ubuntu) or `sudo rpm -i paqetpremium-*.rpm` (RHEL/Fedora), then run the installer for guided setup or `paqetpremium run -c <config>`.
+
 ## [0.14.0] - 2026-06-19
 
 ### Added

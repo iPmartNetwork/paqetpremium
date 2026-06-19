@@ -35,6 +35,19 @@ jobs:
           out="paqetpremium-linux-${{ matrix.arch }}"
           go build -trimpath -ldflags "-s -w" -o "$out" ./cmd/paqetpremium
           sha256sum "$out" > "$out.sha256"
+      - name: Build packages (deb/rpm)
+        run: |
+          go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.41.1
+          mkdir -p dist
+          cp "paqetpremium-linux-${{ matrix.arch }}" dist/paqetpremium
+          PKG_VERSION="${GITHUB_REF_NAME#v}"
+          case "$PKG_VERSION" in
+            ''|*[!0-9.]*) PKG_VERSION="0.0.0" ;;
+          esac
+          export PKG_VERSION
+          export PKG_ARCH="${{ matrix.arch }}"
+          "$(go env GOPATH)/bin/nfpm" package --config nfpm.yaml --packager deb --target .
+          "$(go env GOPATH)/bin/nfpm" package --config nfpm.yaml --packager rpm --target .
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -42,6 +55,8 @@ jobs:
           path: |
             paqetpremium-linux-${{ matrix.arch }}
             paqetpremium-linux-${{ matrix.arch }}.sha256
+            *.deb
+            *.rpm
           if-no-files-found: error
 
   release:

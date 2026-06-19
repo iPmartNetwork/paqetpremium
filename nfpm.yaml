@@ -1,0 +1,33 @@
+name: paqetpremium
+arch: ${PKG_ARCH}
+platform: linux
+version: ${PKG_VERSION}
+section: net
+priority: optional
+maintainer: iPmartNetwork <noreply@users.noreply.github.com>
+description: |
+  PaqetPremium - packet-level tunnel for Linux VPS (libpcap + KCP/QUIC + smux).
+  Iran client (port-forward / SOCKS5 / all-ports range) and foreign server relay.
+vendor: iPmartNetwork
+homepage: https://github.com/iPmartNetwork/paqetpremium
+license: GPL-3.0
+depends:
+  - libpcap0.8
+overrides:
+  rpm:
+    depends:
+      - libpcap
+contents:
+  - src: ./dist/paqetpremium
+    dst: /usr/local/bin/paqetpremium
+    file_info:
+      mode: 0755
+  - src: ./example/
+    dst: /usr/share/doc/paqetpremium/example/
+    type: tree
+  - src: ./README.md
+    dst: /usr/share/doc/paqetpremium/README.md
+  - src: ./README.fa.md
+    dst: /usr/share/doc/paqetpremium/README.fa.md
+  - src: ./CHANGELOG.md
+    dst: /usr/share/doc/paqetpremium/CHANGELOG.md
