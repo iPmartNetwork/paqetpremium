@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Project landing page (GitHub Pages) at `docs/index.html`: a self-contained, bilingual (English/Persian, RTL) dark-theme site with an architecture diagram (Mermaid), feature overview, quick-start, configuration examples with copy buttons, strategy table, dashboard/management, and FAQ. Enable via repo Settings -> Pages -> Source: master /docs.
 - Installer per-tunnel management: `list tunnels` (detailed view with role, transport, upstream/forward/socks/range summary and live status), `edit [name]` (open a tunnel's config in $EDITOR, validate, and restart just that service), and `remove [name]` (delete a single tunnel's config + service without touching other tunnels or the binary). Available as menu items 4/5/6 and as `tunnels` / `edit` / `remove` subcommands.
 
 ### Changed

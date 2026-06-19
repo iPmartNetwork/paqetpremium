@@ -1,0 +1,373 @@
+<!doctype html>
+<html lang="en" id="root">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PaqetPremium — packet-level tunnel for Linux VPS</title>
+<meta name="description" content="PaqetPremium: a packet-level tunnel for Linux VPS using libpcap + KCP/QUIC + smux. Port-forward, SOCKS5, all-ports range mode, multi-upstream failover, FEC, and a live dashboard.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Vazirmatn:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+:root{
+  --bg:#0b0e14;--bg2:#0e131c;--panel:#121826;--panel2:#161d2c;--line:#1f2937;
+  --txt:#e6edf3;--mut:#9aa6b2;--brand:#a78bfa;--brand2:#7c6cf0;--acc:#2dd4bf;--ok:#34d399;--warn:#fbbf24;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,rgba(124,108,240,.18),transparent),var(--bg);color:var(--txt);font-family:Inter,system-ui,Segoe UI,Roboto,sans-serif;line-height:1.6}
+body[dir=rtl]{font-family:Vazirmatn,Inter,system-ui,sans-serif}
+a{color:var(--acc);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:1040px;margin:0 auto;padding:0 20px}
+code,pre{font-family:'JetBrains Mono',ui-monospace,monospace}
+/* nav */
+nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(11,14,20,.7);border-bottom:1px solid var(--line)}
+nav .wrap{display:flex;align-items:center;gap:16px;height:60px}
+.brand{font-weight:700;color:var(--brand);letter-spacing:.3px;font-size:18px}
+.nav-sp{flex:1}
+.nav a{color:var(--mut);font-size:14px}
+.btn{display:inline-block;padding:8px 14px;border-radius:10px;font-size:14px;font-weight:600;border:1px solid var(--line)}
+.btn-p{background:linear-gradient(135deg,var(--brand2),var(--brand));color:#0b0e14;border:0}
+.btn-g{background:var(--panel);color:var(--txt)}
+.lang-toggle{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
+.lang-toggle button{background:transparent;color:var(--mut);border:0;padding:7px 12px;cursor:pointer;font:inherit;font-size:13px}
+.lang-toggle button.on{background:var(--brand);color:#0b0e14;font-weight:700}
+/* hero */
+.hero{padding:72px 0 40px;text-align:center}
+.hero h1{font-size:44px;line-height:1.1;margin:0 0 14px;background:linear-gradient(135deg,#fff,var(--brand));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hero p.tag{font-size:19px;color:var(--mut);max-width:680px;margin:0 auto 22px}
+.badges{display:flex;gap:8px;justify-content:center;flex-wrap:wrap;margin:18px 0}
+.badges img{height:22px}
+.cta{display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:22px}
+/* sections */
+section{padding:46px 0;border-top:1px solid var(--line)}
+h2{font-size:28px;margin:0 0 6px}
+.lead{color:var(--mut);margin:0 0 26px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:16px}
+.card{background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--line);border-radius:14px;padding:18px;transition:transform .15s,border-color .15s}
+.card:hover{transform:translateY(-3px);border-color:var(--brand2)}
+.card h3{margin:0 0 6px;font-size:16px}
+.card .ic{font-size:22px;margin-bottom:8px}
+.card p{margin:0;color:var(--mut);font-size:14px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media(max-width:760px){.two{grid-template-columns:1fr}.hero h1{font-size:34px}}
+.codeblk{position:relative;background:#0a0d14;border:1px solid var(--line);border-radius:12px;margin:12px 0}
+.codeblk pre{margin:0;padding:16px 16px;overflow:auto;font-size:13px;color:#d7e0ea}
+.codeblk .copy{position:absolute;top:8px;inset-inline-end:8px;background:var(--panel2);color:var(--mut);border:1px solid var(--line);border-radius:8px;padding:4px 9px;font-size:12px;cursor:pointer}
+.codeblk .copy:hover{color:var(--txt)}
+.step{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px}
+.step .n{flex:0 0 26px;height:26px;border-radius:50%;background:var(--brand);color:#0b0e14;font-weight:700;display:grid;place-items:center;font-size:13px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden;margin-top:10px}
+th,td{padding:11px 13px;text-align:start;border-bottom:1px solid var(--line);font-size:14px}
+th{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
+tr:last-child td{border-bottom:0}
+.mermaid{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;text-align:center}
+details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px 16px;margin:10px 0}
+summary{cursor:pointer;padding:12px 0;font-weight:600}
+details p{color:var(--mut)}
+footer{border-top:1px solid var(--line);padding:28px 0;color:var(--mut);font-size:14px;text-align:center}
+.note{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:12px;padding:12px 14px;color:#f3d58a;font-size:14px}
+.lang{display:block}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <span class="brand">PaqetPremium</span>
+  <span class="nav-sp"></span>
+  <div class="lang-toggle">
+    <button id="b-en" class="on" onclick="setLang('en')">EN</button>
+    <button id="b-fa" onclick="setLang('fa')">فا</button>
+  </div>
+  <a class="btn btn-g" href="https://github.com/iPmartNetwork/paqetpremium" target="_blank" rel="noopener">GitHub</a>
+</div></nav>
+
+<!-- ENGLISH -->
+<main id="lang-en" class="lang">
+  <header class="hero"><div class="wrap">
+    <h1>Packet-level tunnel for Linux VPS</h1>
+    <p class="tag">PaqetPremium carries traffic inside crafted raw TCP packets (libpcap) and runs KCP or QUIC with smux multiplexing — built for an Iran entry node and a foreign exit node.</p>
+    <div class="badges">
+      <img src="https://img.shields.io/badge/platform-linux%20amd64%20%7C%20arm64-blue" alt="platform">
+      <img src="https://img.shields.io/badge/transport-KCP%20%7C%20QUIC-success" alt="transport">
+      <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="license">
+    </div>
+    <div class="cta">
+      <a class="btn btn-p" href="#quickstart">Get started</a>
+      <a class="btn btn-g" href="https://github.com/iPmartNetwork/paqetpremium" target="_blank" rel="noopener">View on GitHub</a>
+    </div>
+  </div></header>
+
+  <section><div class="wrap">
+    <h2>Why PaqetPremium</h2>
+    <p class="lead">A self-hosted, open tunnel that stays resilient on lossy, filtered links.</p>
+    <div class="grid">
+      <div class="card"><div class="ic">📦</div><h3>Packet-level</h3><p>Crafted raw TCP over libpcap to slip past simple filtering, with KCP or QUIC as the carrier.</p></div>
+      <div class="card"><div class="ic">🔀</div><h3>Multi-upstream</h3><p>Several exit servers with failover, round-robin, weighted, or least-latency strategies + health checks.</p></div>
+      <div class="card"><div class="ic">🌐</div><h3>All-ports range</h3><p>Transparently tunnel any port to the server with one rule — no per-port config.</p></div>
+      <div class="card"><div class="ic">🧦</div><h3>Forward & SOCKS5</h3><p>TCP/UDP port-forward and a SOCKS5 entry (CONNECT + UDP ASSOCIATE).</p></div>
+      <div class="card"><div class="ic">🛡️</div><h3>Self-healing</h3><p>Dead tunnels rebuild automatically with backoff — no manual restarts.</p></div>
+      <div class="card"><div class="ic">📡</div><h3>FEC tuning</h3><p>Optional forward error correction trades a little bandwidth for far fewer retransmits.</p></div>
+      <div class="card"><div class="ic">📊</div><h3>Live dashboard</h3><p>Built-in web dashboard plus Prometheus metrics over the admin API.</p></div>
+      <div class="card"><div class="ic">⚙️</div><h3>systemd-native</h3><p>One-line installer, multi-instance tunnels, .deb/.rpm packages.</p></div>
+    </div>
+  </div></section>
+
+  <section><div class="wrap">
+    <h2>How it works</h2>
+    <p class="lead">Users hit the Iran node; traffic is tunneled to the foreign node, which relays it to the open internet.</p>
+    <div class="mermaid">
+flowchart LR
+  U["User / Apps"] --> C
+  subgraph IR["Iran VPS — role: client"]
+    C["Port-forward / SOCKS5 / All-ports"]
+  end
+  C -->|"pcap crafted TCP<br/>KCP or QUIC + smux"| S
+  subgraph KH["Foreign VPS — role: server"]
+    S["Relay + iptables"]
+  end
+  S --> NET["Open Internet"]
+    </div>
+  </div></section>
+
+  <section id="quickstart"><div class="wrap">
+    <h2>Quick start</h2>
+    <p class="lead">Two Linux VPSes (amd64/arm64). Run the guided installer on each. Both ends share the same secret key.</p>
+    <div class="two">
+      <div>
+        <h3>1 · Foreign server (exit)</h3>
+        <div class="codeblk"><button class="copy">copy</button><pre>curl -fsSL https://raw.githubusercontent.com/iPmartNetwork/paqetpremium/master/scripts/install-linux.sh | sudo bash -s -- server</pre></div>
+        <p style="color:var(--mut);font-size:14px">Pick a port, transport (KCP/QUIC) and a secret key. The installer prints the public address to use on the client.</p>
+      </div>
+      <div>
+        <h3>2 · Iran client (entry)</h3>
+        <div class="codeblk"><button class="copy">copy</button><pre>curl -fsSL https://raw.githubusercontent.com/iPmartNetwork/paqetpremium/master/scripts/install-linux.sh | sudo bash -s -- client</pre></div>
+        <p style="color:var(--mut);font-size:14px">Enter the server's PUBLIC address + the same key, then choose port-forward, SOCKS5, or all-ports range mode.</p>
+      </div>
+    </div>
+    <h3>Install from a package</h3>
+    <div class="codeblk"><button class="copy">copy</button><pre>sudo dpkg -i paqetpremium_*.deb     # Debian / Ubuntu
+sudo rpm  -i paqetpremium-*.rpm     # RHEL / Fedora</pre></div>
+  </div></section>
+
+  <section><div class="wrap">
+    <h2>Configuration examples</h2>
+    <p class="lead">Both ends must agree on the same transport and secret key.</p>
+    <h3>KCP (default) with FEC</h3>
+    <div class="codeblk"><button class="copy">copy</button><pre>transport:
+  protocol: kcp
+  conn: 6
+  kcp:
+    mode: fast
+    block: aes-128-gcm
+    key: SHARED_SECRET
+    mtu: 1150
+    data_shard: 10      # FEC (optional) — both ends must match
+    parity_shard: 3</pre></div>
+    <h3>Multi-upstream (failover)</h3>
+    <div class="codeblk"><button class="copy">copy</button><pre>upstream:
+  strategy: failover     # failover | round_robin | weighted | least_latency
+  health_check: { interval: 10s, timeout: 3s, fail_threshold: 3, recover_threshold: 2 }
+  servers:
+    - { name: de-1, addr: 45.1.1.1:8888, key: SHARED_SECRET, priority: 1, weight: 3 }
+    - { name: nl-1, addr: 45.2.2.2:8888, key: SHARED_SECRET, priority: 2 }</pre></div>
+    <h3>All-ports range mode (client)</h3>
+    <div class="codeblk"><button class="copy">copy</button><pre>range:
+  enabled: true
+  protocol: tcp
+  redirect_port: 47999
+  target_host: "127.0.0.1"   # services on the server
+  ports: "1-65535"           # or "443,8443,2000-3000"
+  exclude: "22"              # keep SSH reachable</pre></div>
+    <div class="note">Range mode exposes the server's local ports through the entry IP. Keep sensitive ports in <b>exclude</b>.</div>
+  </div></section>
+
+  <section><div class="wrap">
+    <h2>Load-balancing strategies</h2>
+    <table>
+      <tr><th>Strategy</th><th>Behaviour</th><th>Use when</th></tr>
+      <tr><td>failover</td><td>Always the highest-priority healthy server; switches on failure</td><td>One primary + backups</td></tr>
+      <tr><td>round_robin</td><td>Even rotation across healthy servers</td><td>Equal servers</td></tr>
+      <tr><td>weighted</td><td>Share proportional to weight</td><td>Different capacities</td></tr>
+      <tr><td>least_latency</td><td>Lowest measured RTT</td><td>Always fastest</td></tr>
+    </table>
+  </div></section>
+
+  <section><div class="wrap">
+    <h2>Dashboard & management</h2>
+    <p class="lead">A live dark dashboard ships in the admin API (bound to 127.0.0.1). View it over SSH:</p>
+    <div class="codeblk"><button class="copy">copy</button><pre>ssh -L 9090:127.0.0.1:9090 root@SERVER_IP
+# then open http://localhost:9090  (add ?token=... if a token is set)</pre></div>
+    <p class="lead">Manage individual tunnels from the installer:</p>
+    <div class="codeblk"><button class="copy">copy</button><pre>sudo ./install-premium.sh tunnels        # list with details
+sudo ./install-premium.sh edit   client  # edit one tunnel + restart
+sudo ./install-premium.sh remove v2ray-1 # delete a single tunnel</pre></div>
+  </div></section>
+
+  <section><div class="wrap">
+    <h2>FAQ</h2>
+    <details><summary>Does it work behind NAT?</summary><p>Yes. The server crafts packets with its interface IP and the provider NAT rewrites it; configure the client with the server's PUBLIC IP.</p></details>
+    <details><summary>Which panel protocols are supported?</summary><p>Any TCP-based inbound (VLESS/Reality, VMess+WS, Trojan, gRPC, …) works transparently. UDP-based ones (QUIC/Hysteria2/TUIC) work over UDP forwarding with preserved datagram boundaries.</p></details>
+    <details><summary>KCP or QUIC?</summary><p>KCP is the default and tuned for lossy links; QUIC uses TLS 1.3 with a certificate pinned to your shared secret. Both ends must match.</p></details>
+  </div></section>
+
+  <footer><div class="wrap">
+    PaqetPremium · GPL-3.0 · <a href="https://github.com/iPmartNetwork/paqetpremium" target="_blank" rel="noopener">github.com/iPmartNetwork/paqetpremium</a>
+  </div></footer>
+</main>
+
+<!-- PERSIAN -->
+<main id="lang-fa" class="lang" dir="rtl" hidden>
+  <header class="hero"><div class="wrap">
+    <h1>تونل سطح‌پکت برای VPS لینوکسی</h1>
+    <p class="tag">PaqetPremium ترافیک را داخل پکت‌های TCP خام ساختگی (libpcap) جابه‌جا می‌کند و از KCP یا QUIC به‌همراه multiplex با smux استفاده می‌کند — ساخته‌شده برای یک نودِ ورودی در ایران و یک نودِ خروجی در خارج.</p>
+    <div class="badges">
+      <img src="https://img.shields.io/badge/platform-linux%20amd64%20%7C%20arm64-blue" alt="platform">
+      <img src="https://img.shields.io/badge/transport-KCP%20%7C%20QUIC-success" alt="transport">
+      <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="license">
+    </div>
+    <div class="cta">
+      <a class="btn btn-p" href="#quickstart-fa">شروع کنید</a>
+      <a class="btn btn-g" href="https://github.com/iPmartNetwork/paqetpremium" target="_blank" rel="noopener">مشاهده در GitHub</a>
+    </div>
+  </div></header>
+
+  <section><div class="wrap">
+    <h2>چرا PaqetPremium</h2>
+    <p class="lead">یک تونلِ سورس‌باز و self-hosted که روی لینک‌های پرافت و فیلترشده پایدار می‌ماند.</p>
+    <div class="grid">
+      <div class="card"><div class="ic">📦</div><h3>سطح‌پکت</h3><p>TCP خام ساختگی روی libpcap برای عبور از فیلترینگ ساده، با KCP یا QUIC به‌عنوان حامل.</p></div>
+      <div class="card"><div class="ic">🔀</div><h3>چند سرور</h3><p>چند سرور خروجی با استراتژی‌های failover، round-robin، weighted و least-latency به‌همراه health check.</p></div>
+      <div class="card"><div class="ic">🌐</div><h3>تمام پورت‌ها</h3><p>تونلِ شفافِ هر پورت به سرور تنها با یک قانون — بدون تنظیمِ پورت‌به‌پورت.</p></div>
+      <div class="card"><div class="ic">🧦</div><h3>Forward و SOCKS5</h3><p>port-forward برای TCP/UDP و ورودیِ SOCKS5 (CONNECT + UDP ASSOCIATE).</p></div>
+      <div class="card"><div class="ic">🛡️</div><h3>خوددرمان</h3><p>تونل‌های مرده به‌صورت خودکار و با backoff بازسازی می‌شوند — بدون ری‌استارت دستی.</p></div>
+      <div class="card"><div class="ic">📡</div><h3>تنظیم FEC</h3><p>تصحیح خطای رو‌به‌جلوِ اختیاری: کمی پهنای‌باند در ازای ارسالِ مجددِ بسیار کمتر.</p></div>
+      <div class="card"><div class="ic">📊</div><h3>داشبورد زنده</h3><p>داشبورد وب داخلی به‌همراه متریک Prometheus روی Admin API.</p></div>
+      <div class="card"><div class="ic">⚙️</div><h3>یکپارچه با systemd</h3><p>نصب‌کننده‌ی تک‌خطی، تونل‌های چنداینستنسی، بسته‌های deb/rpm.</p></div>
+    </div>
+  </div></section>
+
+  <section><div class="wrap">
+    <h2>چطور کار می‌کند</h2>
+    <p class="lead">کاربران به نودِ ایران وصل می‌شوند؛ ترافیک به نودِ خارج تونل می‌شود و آنجا به اینترنت آزاد رله می‌گردد.</p>
+    <div class="mermaid">
+flowchart RL
+  U["کاربر / اپ‌ها"] --> C
+  subgraph IR["VPS ایران — client"]
+    C["port-forward / SOCKS5 / همه‌پورت"]
+  end
+  C -->|"TCP ساختگیِ pcap<br/>KCP یا QUIC + smux"| S
+  subgraph KH["VPS خارج — server"]
+    S["رله + iptables"]
+  end
+  S --> NET["اینترنت آزاد"]
+    </div>
+  </div></section>
+
+  <section id="quickstart-fa"><div class="wrap">
+    <h2>شروع سریع</h2>
+    <p class="lead">دو VPS لینوکسی (amd64/arm64). روی هر کدام نصب‌کننده را اجرا کنید. هر دو طرف یک secret key مشترک دارند.</p>
+    <div class="two">
+      <div>
+        <h3>۱ · سرور خارج (خروجی)</h3>
+        <div class="codeblk"><button class="copy">کپی</button><pre>curl -fsSL https://raw.githubusercontent.com/iPmartNetwork/paqetpremium/master/scripts/install-linux.sh | sudo bash -s -- server</pre></div>
+        <p style="color:var(--mut);font-size:14px">پورت، transport (KCP/QUIC) و یک کلید مخفی انتخاب کنید. نصب‌کننده آدرس عمومیِ موردِ استفاده روی کلاینت را نشان می‌دهد.</p>
+      </div>
+      <div>
+        <h3>۲ · کلاینت ایران (ورودی)</h3>
+        <div class="codeblk"><button class="copy">کپی</button><pre>curl -fsSL https://raw.githubusercontent.com/iPmartNetwork/paqetpremium/master/scripts/install-linux.sh | sudo bash -s -- client</pre></div>
+        <p style="color:var(--mut);font-size:14px">آدرس عمومیِ سرور و همان کلید را وارد کنید، سپس port-forward، SOCKS5 یا حالتِ همه‌پورت را انتخاب کنید.</p>
+      </div>
+    </div>
+    <h3>نصب از بسته</h3>
+    <div class="codeblk"><button class="copy">کپی</button><pre>sudo dpkg -i paqetpremium_*.deb     # دبیان / اوبونتو
+sudo rpm  -i paqetpremium-*.rpm     # RHEL / فدورا</pre></div>
+  </div></section>
+
+  <section><div class="wrap">
+    <h2>نمونه‌های پیکربندی</h2>
+    <p class="lead">هر دو طرف باید روی یک transport و یک کلید مشترک توافق داشته باشند.</p>
+    <h3>KCP (پیش‌فرض) با FEC</h3>
+    <div class="codeblk"><button class="copy">کپی</button><pre>transport:
+  protocol: kcp
+  conn: 6
+  kcp:
+    mode: fast
+    block: aes-128-gcm
+    key: SHARED_SECRET
+    mtu: 1150
+    data_shard: 10      # FEC (اختیاری) — باید در دو طرف یکی باشد
+    parity_shard: 3</pre></div>
+    <h3>چند سرور (failover)</h3>
+    <div class="codeblk"><button class="copy">کپی</button><pre>upstream:
+  strategy: failover     # failover | round_robin | weighted | least_latency
+  health_check: { interval: 10s, timeout: 3s, fail_threshold: 3, recover_threshold: 2 }
+  servers:
+    - { name: de-1, addr: 45.1.1.1:8888, key: SHARED_SECRET, priority: 1, weight: 3 }
+    - { name: nl-1, addr: 45.2.2.2:8888, key: SHARED_SECRET, priority: 2 }</pre></div>
+    <h3>حالتِ همه‌پورت (کلاینت)</h3>
+    <div class="codeblk"><button class="copy">کپی</button><pre>range:
+  enabled: true
+  protocol: tcp
+  redirect_port: 47999
+  target_host: "127.0.0.1"   # سرویس‌ها روی سرور
+  ports: "1-65535"           # یا "443,8443,2000-3000"
+  exclude: "22"              # SSH را باز نگه دارید</pre></div>
+    <div class="note">حالتِ همه‌پورت، پورت‌های لوکالِ سرور را از طریق IP ورودی در دسترس می‌کند. پورت‌های حساس را در <b>exclude</b> بگذارید.</div>
+  </div></section>
+
+  <section><div class="wrap">
+    <h2>استراتژی‌های توزیع بار</h2>
+    <table>
+      <tr><th>استراتژی</th><th>رفتار</th><th>مناسب وقتی</th></tr>
+      <tr><td>failover</td><td>همیشه سالم‌ترین سرور با بالاترین اولویت؛ هنگام خرابی سوییچ می‌کند</td><td>یک اصلی + پشتیبان</td></tr>
+      <tr><td>round_robin</td><td>چرخش مساوی بین سرورهای سالم</td><td>سرورهای هم‌سطح</td></tr>
+      <tr><td>weighted</td><td>سهم متناسب با weight</td><td>ظرفیت‌های متفاوت</td></tr>
+      <tr><td>least_latency</td><td>کمترین RTT اندازه‌گیری‌شده</td><td>همیشه سریع‌ترین</td></tr>
+    </table>
+  </div></section>
+
+  <section><div class="wrap">
+    <h2>داشبورد و مدیریت</h2>
+    <p class="lead">یک داشبورد تیره‌ی زنده داخل Admin API هست (روی 127.0.0.1). با SSH ببینیدش:</p>
+    <div class="codeblk"><button class="copy">کپی</button><pre>ssh -L 9090:127.0.0.1:9090 root@SERVER_IP
+# سپس باز کنید http://localhost:9090  (اگر توکن دارید ?token=... اضافه کنید)</pre></div>
+    <p class="lead">مدیریتِ تک‌تونلی از نصب‌کننده:</p>
+    <div class="codeblk"><button class="copy">کپی</button><pre>sudo ./install-premium.sh tunnels        # فهرست با جزئیات
+sudo ./install-premium.sh edit   client  # ویرایش یک تونل + ری‌استارت
+sudo ./install-premium.sh remove v2ray-1 # حذف یک تونلِ خاص</pre></div>
+  </div></section>
+
+  <section><div class="wrap">
+    <h2>سوالات متداول</h2>
+    <details><summary>پشت NAT کار می‌کند؟</summary><p>بله. سرور بسته‌ها را با IP اینترفیسِ خود می‌سازد و NAT پرووایدر آن را بازنویسی می‌کند؛ روی کلاینت باید IP عمومیِ سرور را تنظیم کنید.</p></details>
+    <details><summary>چه پروتکل‌های پنلی پشتیبانی می‌شوند؟</summary><p>هر inbound مبتنی بر TCP (VLESS/Reality، VMess+WS، Trojan، gRPC و…) شفاف کار می‌کند. موارد مبتنی بر UDP (QUIC/Hysteria2/TUIC) روی forwardِ UDP با حفظِ مرز دیتاگرام کار می‌کنند.</p></details>
+    <details><summary>KCP یا QUIC؟</summary><p>KCP پیش‌فرض و برای لینک‌های پرافت تیون شده؛ QUIC از TLS 1.3 با گواهیِ pin‌شده به secret مشترک استفاده می‌کند. هر دو طرف باید یکی باشند.</p></details>
+  </div></section>
+
+  <footer><div class="wrap">
+    PaqetPremium · GPL-3.0 · <a href="https://github.com/iPmartNetwork/paqetpremium" target="_blank" rel="noopener">github.com/iPmartNetwork/paqetpremium</a>
+  </div></footer>
+</main>
+
+<script>
+mermaid.initialize({startOnLoad:true,theme:"dark",themeVariables:{primaryColor:"#161d2c",primaryBorderColor:"#7c6cf0",primaryTextColor:"#e6edf3",lineColor:"#2dd4bf",fontSize:"14px"}});
+function setLang(l){
+  var en=document.getElementById("lang-en"),fa=document.getElementById("lang-fa");
+  var root=document.getElementById("root");
+  if(l==="fa"){fa.hidden=false;en.hidden=true;root.lang="fa";document.body.setAttribute("dir","rtl");document.getElementById("b-fa").classList.add("on");document.getElementById("b-en").classList.remove("on");}
+  else{en.hidden=false;fa.hidden=true;root.lang="en";document.body.removeAttribute("dir");document.getElementById("b-en").classList.add("on");document.getElementById("b-fa").classList.remove("on");}
+  try{localStorage.setItem("pp-lang",l);}catch(e){}
+}
+document.addEventListener("click",function(e){
+  if(e.target&&e.target.classList&&e.target.classList.contains("copy")){
+    var pre=e.target.parentElement.querySelector("pre");
+    if(pre&&navigator.clipboard){navigator.clipboard.writeText(pre.innerText);var t=e.target.textContent;e.target.textContent="✓";setTimeout(function(){e.target.textContent=t;},1200);}
+  }
+});
+(function(){try{var s=localStorage.getItem("pp-lang");if(s){setLang(s);}}catch(e){}})();
+</script>
+</body>
+</html>
