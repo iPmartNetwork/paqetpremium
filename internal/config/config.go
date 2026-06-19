@@ -180,10 +180,14 @@ type TransportConfig struct {
 }
 
 type KCPConfig struct {
-	Mode  string `yaml:"mode"`
-	Block string `yaml:"block"`
-	Key   string `yaml:"key"`
-	MTU   int    `yaml:"mtu"`
+	Mode        string `yaml:"mode"`
+	Block       string `yaml:"block"`
+	Key         string `yaml:"key"`
+	MTU         int    `yaml:"mtu"`
+	DataShard   int    `yaml:"data_shard"`
+	ParityShard int    `yaml:"parity_shard"`
+	SndWnd      int    `yaml:"snd_wnd"`
+	RcvWnd      int    `yaml:"rcv_wnd"`
 }
 
 type QUICConfig struct {
@@ -263,6 +267,18 @@ func (c *Config) Validate() error {
 		}
 		if c.Transport.KCP.MTU <= 0 {
 			c.Transport.KCP.MTU = 1150
+		}
+		if c.Transport.KCP.DataShard < 0 || c.Transport.KCP.ParityShard < 0 {
+			return fmt.Errorf("transport.kcp data_shard/parity_shard must be >= 0")
+		}
+		if c.Transport.KCP.ParityShard > 0 && c.Transport.KCP.DataShard == 0 {
+			return fmt.Errorf("transport.kcp.data_shard must be > 0 when parity_shard is set")
+		}
+		if c.Transport.KCP.DataShard+c.Transport.KCP.ParityShard > 255 {
+			return fmt.Errorf("transport.kcp data_shard+parity_shard must be <= 255")
+		}
+		if c.Transport.KCP.SndWnd < 0 || c.Transport.KCP.RcvWnd < 0 {
+			return fmt.Errorf("transport.kcp snd_wnd/rcv_wnd must be >= 0")
 		}
 	}
 	if proto == "quic" {

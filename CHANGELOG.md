@@ -5,6 +5,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.13.0] - 2026-06-19
+
+### Added
+- Configurable KCP forward error correction and windows: `transport.kcp.data_shard`, `transport.kcp.parity_shard`, `transport.kcp.snd_wnd`, and `transport.kcp.rcv_wnd`. FEC trades a little bandwidth for far fewer retransmits on lossy links (common on Iran<->abroad paths) - e.g. `data_shard: 10` / `parity_shard: 3` recovers up to 3 lost packets per group without a round-trip. Defaults are unchanged (FEC off, role-based windows), so existing tunnels behave identically. Both ends must use the SAME data_shard/parity_shard. Validated by a new FEC integration test.
+
 ## [0.12.0] - 2026-06-19
 
 ### Added

@@ -96,7 +96,7 @@ func Dial(ctx context.Context, addr *net.UDPAddr, opt Options, pconn net.PacketC
 }
 
 func dialKCP(addr *net.UDPAddr, opt Options, pconn net.PacketConn) (*Session, error) {
-	kcpConn, err := kcp.NewConn(addr.String(), opt.KCP.Block, 0, 0, pconn)
+	kcpConn, err := kcp.NewConn(addr.String(), opt.KCP.Block, opt.KCP.DataShard, opt.KCP.ParityShard, pconn)
 	if err != nil {
 		return nil, fmt.Errorf("kcp dial: %w", err)
 	}
@@ -126,7 +126,7 @@ func Listen(opt Options, pconn net.PacketConn) (*Listener, error) {
 		}
 		return &Listener{packetConn: pconn, opt: opt, quicLn: qln}, nil
 	default:
-		ln, err := kcp.ServeConn(opt.KCP.Block, 0, 0, pconn)
+		ln, err := kcp.ServeConn(opt.KCP.Block, opt.KCP.DataShard, opt.KCP.ParityShard, pconn)
 		if err != nil {
 			return nil, fmt.Errorf("kcp listen: %w", err)
 		}

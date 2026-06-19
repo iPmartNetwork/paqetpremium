@@ -15,18 +15,22 @@ import (
 	"github.com/xtaci/smux"
 )
 
-// integrationOptions builds transport options for the given protocol with a
-// shared secret (both ends use the same options).
 func integrationOptions(t *testing.T, proto string) transport.Options {
+	return integrationOptionsShards(t, proto, 0, 0)
+}
+
+func integrationOptionsShards(t *testing.T, proto string, dataShard, parityShard int) transport.Options {
 	t.Helper()
 	opt, err := transport.OptionsFromConfig(config.RoleServer, config.TransportConfig{
 		Protocol: proto,
 		Conn:     1,
 		KCP: config.KCPConfig{
-			Mode:  "fast",
-			Block: "aes-128-gcm",
-			Key:   "integration-secret-key",
-			MTU:   1350,
+			Mode:        "fast",
+			Block:       "aes-128-gcm",
+			Key:         "integration-secret-key",
+			MTU:         1350,
+			DataShard:   dataShard,
+			ParityShard: parityShard,
 		},
 		QUIC: config.QUICConfig{ALPN: "paqetpremium-test"},
 	})
@@ -75,11 +79,14 @@ func runServerLoop(ctx context.Context, ln *transport.Listener) {
 	}
 }
 
-// dialTunnel stands up a server listener + client session over a pair of
-// loopback UDP PacketConns (no pcap engine required) and returns the client session.
 func dialTunnel(ctx context.Context, t *testing.T, proto string) *transport.Session {
+	return dialTunnelOpt(ctx, t, integrationOptions(t, proto))
+}
+
+// dialTunnelOpt stands up a server listener + client session over a pair of
+// loopback UDP PacketConns (no pcap engine required) and returns the client session.
+func dialTunnelOpt(ctx context.Context, t *testing.T, opt transport.Options) *transport.Session {
 	t.Helper()
-	opt := integrationOptions(t, proto)
 
 	serverPC, err := net.ListenPacket("udp", "127.0.0.1:0")
 	if err != nil {
@@ -106,58 +113,72 @@ func dialTunnel(ctx context.Context, t *testing.T, proto string) *transport.Sess
 	return sess
 }
 
+// assertTCPEcho opens a stream, points it at a fresh TCP echo server through the
+// relay, and verifies a payload round-trips intact.
+func assertTCPEcho(ctx context.Context, t *testing.T, sess *transport.Session) {
+	t.Helper()
+
+	echoLn, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("echo listen: %v", err)
+	}
+	defer echoLn.Close()
+	go func() {
+		for {
+			c, err := echoLn.Accept()
+			if err != nil {
+				return
+			}
+			go func(c net.Conn) { defer c.Close(); _, _ = io.Copy(c, c) }(c)
+		}
+	}()
+
+	strm, err := sess.Smux.OpenStream()
+	if err != nil {
+		t.Fatalf("open stream: %v", err)
+	}
+	defer strm.Close()
+
+	addr, err := tunneladdr.Parse(echoLn.Addr().String())
+	if err != nil {
+		t.Fatalf("parse addr: %v", err)
+	}
+	if err := (&protocol.Message{Type: protocol.TCP, Addr: addr}).Write(strm); err != nil {
+		t.Fatalf("write tcp msg: %v", err)
+	}
+
+	want := []byte("hello-through-the-tunnel")
+	_ = strm.SetWriteDeadline(time.Now().Add(5 * time.Second))
+	if _, err := strm.Write(want); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	got := make([]byte, len(want))
+	_ = strm.SetReadDeadline(time.Now().Add(10 * time.Second))
+	if _, err := io.ReadFull(strm, got); err != nil {
+		t.Fatalf("read echo: %v", err)
+	}
+	if !bytes.Equal(got, want) {
+		t.Fatalf("echo mismatch: got %q want %q", got, want)
+	}
+}
+
 func TestIntegrationTCPEcho(t *testing.T) {
 	for _, proto := range []string{"kcp", "quic"} {
 		proto := proto
 		t.Run(proto, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 			defer cancel()
-
-			echoLn, err := net.Listen("tcp", "127.0.0.1:0")
-			if err != nil {
-				t.Fatalf("echo listen: %v", err)
-			}
-			defer echoLn.Close()
-			go func() {
-				for {
-					c, err := echoLn.Accept()
-					if err != nil {
-						return
-					}
-					go func(c net.Conn) { defer c.Close(); _, _ = io.Copy(c, c) }(c)
-				}
-			}()
-
 			sess := dialTunnel(ctx, t, proto)
-			strm, err := sess.Smux.OpenStream()
-			if err != nil {
-				t.Fatalf("open stream: %v", err)
-			}
-			defer strm.Close()
-
-			addr, err := tunneladdr.Parse(echoLn.Addr().String())
-			if err != nil {
-				t.Fatalf("parse addr: %v", err)
-			}
-			if err := (&protocol.Message{Type: protocol.TCP, Addr: addr}).Write(strm); err != nil {
-				t.Fatalf("write tcp msg: %v", err)
-			}
-
-			want := []byte("hello-through-the-tunnel")
-			_ = strm.SetWriteDeadline(time.Now().Add(5 * time.Second))
-			if _, err := strm.Write(want); err != nil {
-				t.Fatalf("write: %v", err)
-			}
-			got := make([]byte, len(want))
-			_ = strm.SetReadDeadline(time.Now().Add(10 * time.Second))
-			if _, err := io.ReadFull(strm, got); err != nil {
-				t.Fatalf("read echo: %v", err)
-			}
-			if !bytes.Equal(got, want) {
-				t.Fatalf("echo mismatch: got %q want %q", got, want)
-			}
+			assertTCPEcho(ctx, t, sess)
 		})
 	}
+}
+
+func TestIntegrationKCPWithFEC(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	sess := dialTunnelOpt(ctx, t, integrationOptionsShards(t, "kcp", 10, 3))
+	assertTCPEcho(ctx, t, sess)
 }
 
 func TestIntegrationUDPDatagrams(t *testing.T) {
@@ -195,8 +216,6 @@ func TestIntegrationUDPDatagrams(t *testing.T) {
 		t.Fatalf("write udp msg: %v", err)
 	}
 
-	// Send each datagram and read its echo back before the next, asserting that
-	// datagram boundaries are preserved end-to-end through the relay.
 	payloads := [][]byte{
 		[]byte("a"),
 		bytes.Repeat([]byte{0x42}, 1200),

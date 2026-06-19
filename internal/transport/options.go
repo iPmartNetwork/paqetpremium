@@ -24,11 +24,13 @@ type Options struct {
 }
 
 type KCPOptions struct {
-	Block  kcp.BlockCrypt
-	Mode   string
-	MTU    int
-	SndWnd int
-	RcvWnd int
+	Block       kcp.BlockCrypt
+	Mode        string
+	MTU         int
+	SndWnd      int
+	RcvWnd      int
+	DataShard   int
+	ParityShard int
 }
 
 type QUICOptions struct {
@@ -83,12 +85,20 @@ func OptionsFromConfig(role string, t config.TransportConfig) (Options, error) {
 		if mtu <= 0 {
 			mtu = 1150
 		}
+		if t.KCP.SndWnd > 0 {
+			snd = t.KCP.SndWnd
+		}
+		if t.KCP.RcvWnd > 0 {
+			rcv = t.KCP.RcvWnd
+		}
 		opt.KCP = KCPOptions{
-			Block:  block,
-			Mode:   mode,
-			MTU:    mtu,
-			SndWnd: snd,
-			RcvWnd: rcv,
+			Block:       block,
+			Mode:        mode,
+			MTU:         mtu,
+			SndWnd:      snd,
+			RcvWnd:      rcv,
+			DataShard:   t.KCP.DataShard,
+			ParityShard: t.KCP.ParityShard,
 		}
 	case ProtocolQUIC:
 		// QUIC uses TLS derived from the same shared secret key.
