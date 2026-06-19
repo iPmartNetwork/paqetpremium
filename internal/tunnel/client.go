@@ -14,6 +14,7 @@ import (
 	"github.com/paqetpremium/paqetpremium/internal/config"
 	"github.com/paqetpremium/paqetpremium/internal/forward"
 	"github.com/paqetpremium/paqetpremium/internal/metrics"
+	"github.com/paqetpremium/paqetpremium/internal/redirect"
 	"github.com/paqetpremium/paqetpremium/internal/socks5"
 	"github.com/paqetpremium/paqetpremium/internal/tunnelpool"
 	"github.com/paqetpremium/paqetpremium/internal/upstream"
@@ -111,9 +112,31 @@ func (c *Client) startServices(ctx context.Context, cfg *config.Config) {
 		}(cfg.SOCKS5)
 	}
 
+	if cfg.Range != nil && cfg.Range.Enabled {
+		ranges, _ := cfg.Range.PortRanges()
+		excl, _ := cfg.Range.ExcludePorts()
+		rm := redirect.NewManager(route, c.log)
+		if err := rm.Start(svcCtx, redirect.Config{
+			RedirectPort: cfg.Range.RedirectPort,
+			TargetHost:   cfg.Range.TargetHost,
+			PortRanges:   ranges,
+			Exclude:      excl,
+			BindUpstream: cfg.Range.BindUpstream,
+		}); err != nil {
+			c.log.Error("range redirect start failed", "err", err)
+		} else {
+			c.svcWg.Add(1)
+			go func() {
+				defer c.svcWg.Done()
+				rm.Wait()
+			}()
+		}
+	}
+
 	c.log.Info("client services started",
 		"forward", len(cfg.Forward),
 		"socks5", len(cfg.SOCKS5),
+		"range", cfg.Range != nil && cfg.Range.Enabled,
 	)
 }
 

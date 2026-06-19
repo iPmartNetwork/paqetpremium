@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/goccy/go-yaml"
@@ -25,6 +26,8 @@ type Config struct {
 
 	Forward []ForwardRule `yaml:"forward,omitempty"`
 	SOCKS5  []SOCKS5Rule  `yaml:"socks5,omitempty"`
+
+	Range *RangeConfig `yaml:"range,omitempty"`
 
 	Listen *ListenConfig `yaml:"listen,omitempty"`
 
@@ -75,6 +78,68 @@ type SOCKS5Rule struct {
 type SOCKSAuth struct {
 	User string `yaml:"user"`
 	Pass string `yaml:"pass"`
+}
+
+// RangeConfig enables transparent "tunnel all ports" mode on the client: a
+// single local listener plus an iptables nat REDIRECT for a port range. Each
+// redirected connection is tunneled to target_host:<original destination port>.
+type RangeConfig struct {
+	Enabled      bool   `yaml:"enabled"`
+	Protocol     string `yaml:"protocol"`      // tcp (only tcp supported)
+	RedirectPort int    `yaml:"redirect_port"` // local REDIRECT listener port
+	TargetHost   string `yaml:"target_host"`   // server-side dial host (e.g. 127.0.0.1)
+	Ports        string `yaml:"ports"`         // e.g. "1-65535" or "443,8443,2000-3000"
+	Exclude      string `yaml:"exclude"`       // ports never redirected, e.g. "22,9090"
+	BindUpstream string `yaml:"bind_upstream,omitempty"`
+}
+
+// PortRanges parses Ports into inclusive [lo,hi] ranges.
+func (r *RangeConfig) PortRanges() ([][2]int, error) { return parsePortRanges(r.Ports) }
+
+// ExcludePorts parses Exclude into a list of single ports.
+func (r *RangeConfig) ExcludePorts() ([]int, error) {
+	var out []int
+	for _, part := range strings.Split(r.Exclude, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		p, err := strconv.Atoi(part)
+		if err != nil || p < 1 || p > 65535 {
+			return nil, fmt.Errorf("invalid exclude port %q", part)
+		}
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+func parsePortRanges(s string) ([][2]int, error) {
+	var out [][2]int
+	for _, part := range strings.Split(s, ",") {
+		part = strings.TrimSpace(part)
+		if part == "" {
+			continue
+		}
+		if strings.Contains(part, "-") {
+			lohi := strings.SplitN(part, "-", 2)
+			lo, err1 := strconv.Atoi(strings.TrimSpace(lohi[0]))
+			hi, err2 := strconv.Atoi(strings.TrimSpace(lohi[1]))
+			if err1 != nil || err2 != nil || lo < 1 || hi > 65535 || lo > hi {
+				return nil, fmt.Errorf("invalid port range %q", part)
+			}
+			out = append(out, [2]int{lo, hi})
+		} else {
+			p, err := strconv.Atoi(part)
+			if err != nil || p < 1 || p > 65535 {
+				return nil, fmt.Errorf("invalid port %q", part)
+			}
+			out = append(out, [2]int{p, p})
+		}
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no ports specified")
+	}
+	return out, nil
 }
 
 type ListenConfig struct {
@@ -217,8 +282,34 @@ func (c *Config) Validate() error {
 				return fmt.Errorf("client requires upstream.servers or server.addr")
 			}
 		}
-		if len(c.Forward) == 0 && len(c.SOCKS5) == 0 {
-			return fmt.Errorf("client requires forward or socks5 rules")
+		if c.Range != nil && c.Range.Enabled {
+			if strings.TrimSpace(c.Range.Protocol) == "" {
+				c.Range.Protocol = "tcp"
+			}
+			if c.Range.Protocol != "tcp" {
+				return fmt.Errorf("range.protocol: only tcp is supported")
+			}
+			if c.Range.RedirectPort <= 0 {
+				c.Range.RedirectPort = 47999
+			}
+			if strings.TrimSpace(c.Range.TargetHost) == "" {
+				c.Range.TargetHost = "127.0.0.1"
+			}
+			if strings.TrimSpace(c.Range.Ports) == "" {
+				c.Range.Ports = "1-65535"
+			}
+			if strings.TrimSpace(c.Range.Exclude) == "" {
+				c.Range.Exclude = "22"
+			}
+			if _, err := c.Range.PortRanges(); err != nil {
+				return fmt.Errorf("range.ports: %w", err)
+			}
+			if _, err := c.Range.ExcludePorts(); err != nil {
+				return fmt.Errorf("range.exclude: %w", err)
+			}
+		}
+		if len(c.Forward) == 0 && len(c.SOCKS5) == 0 && (c.Range == nil || !c.Range.Enabled) {
+			return fmt.Errorf("client requires forward, socks5, or range rules")
 		}
 	}
 
