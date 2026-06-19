@@ -7,12 +7,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Fixed
-- Installer (`install-premium.sh`): removed an over-eager `set -e` + `ERR` trap (and a `BASH_COMMAND` typo) that aborted the interactive wizard with a cryptic "unbound variable" message right after a successful install, triggered by benign non-zero exits from detection commands (`awk ... exit` raising SIGPIPE under `pipefail`). Critical steps (Go/toolchain download, git clone, build, binary install) now fail explicitly and service starts are non-fatal with log hints.
-- Installer: NAT awareness. The server wizard now detects the host's public IPv4 and explicitly tells the operator which address to configure on the client, warning when the interface IP differs from the public IP (i.e. the server is behind NAT). The client wizard now prompts for the server's PUBLIC address and warns on obviously-private inputs. This prevents pointing the client at the server's internal/NAT IP, which silently dropped all tunnel traffic.
-
-## [Unreleased]
-
 ### Added
 - Installer: redesigned interactive UI (richer 256-color theme, sectioned layout, confirmation summary cards, readiness cards) and a multi-upstream client wizard. You can now add several exit servers, each with its own public IP, port, key and priority/weight, and pick the load-balancing strategy (failover / round_robin / weighted / least_latency). The server address is entered as separate IP and port prompts. The same multi-upstream flow is available in the multi-instance "add-tunnel" wizard.
 
@@ -23,6 +17,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - pcap receive BPF filter no longer hard-codes an `ip6` clause when IPv6 is not configured; the `ip6` term is added only when an IPv6 address is present (matches the reference engine and avoids relying on libpcap IPv6 support on IPv4-only hosts).
+- Installer (`install-premium.sh`): removed an over-eager `set -e` + `ERR` trap (and a `BASH_COMMAND` typo) that aborted the interactive wizard with a cryptic "unbound variable" message right after a successful install, triggered by benign non-zero exits from detection commands (`awk ... exit` raising SIGPIPE under `pipefail`). Critical steps (Go/toolchain download, git clone, build, binary install) now fail explicitly and service starts are non-fatal with log hints.
+- Installer: NAT awareness. The server wizard detects the host's public IPv4 and tells the operator which address to configure on clients, warning when the interface IP differs from the public IP (server behind NAT). The client and multi-instance wizards prompt for the server's PUBLIC address and warn on obviously-private inputs. This prevents pointing the client at the server's internal/NAT IP, which silently dropped all tunnel traffic.
 
 ## [0.9.0] - 2026-06-19
 
