@@ -45,6 +45,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 
 	mux := http.NewServeMux()
+	mux.HandleFunc("/", s.handleDashboard)
 	mux.HandleFunc("/healthz", s.handleHealthz)
 	mux.HandleFunc("/api/v1/status", s.auth(s.handleStatus))
 	if s.reload != nil {
@@ -106,6 +107,15 @@ func (s *Server) authorized(r *http.Request) bool {
 func (s *Server) handleHealthz(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write([]byte("ok"))
+}
+
+func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path != "/" {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	_, _ = w.Write([]byte(dashboardHTML))
 }
 
 func (s *Server) handleStatus(w http.ResponseWriter, _ *http.Request) {

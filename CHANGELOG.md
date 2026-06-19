@@ -5,9 +5,10 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.12.0] - 2026-06-19
 
 ### Added
+- Web dashboard: the admin server now serves a self-contained dark-theme status page at its root (`/`) showing live download/upload throughput (with per-second rate), sessions, TCP/UDP and relay counters, error count, and a per-upstream health/RTT/sessions table, auto-refreshing every 2s. It reads the admin token from `?token=` when one is configured.
 - Integration test harness: a full client<->server tunnel is exercised over loopback UDP PacketConns (no pcap engine or root needed), validating TCP echo over both KCP and QUIC and UDP datagram boundary preservation. Runs in CI on every push and locally on any platform.
 
 ### Changed
