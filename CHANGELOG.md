@@ -5,6 +5,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-06-19
+
+### Fixed
+- UDP relay now preserves datagram boundaries. Previously UDP payloads were copied as a raw byte stream over smux, which merged or split datagrams and broke UDP-based protocols (QUIC, Hysteria2, TUIC, WireGuard) and DNS under load. Both the client forward path and the server relay now use a length-prefixed datagram codec. Note: client and server must both run >= 0.11.0 for UDP forwarding; TCP is unaffected.
+
 ## [0.10.0] - 2026-06-19
 
 ### Added

@@ -10,6 +10,7 @@ import (
 
 	"github.com/paqetpremium/paqetpremium/internal/ioext"
 	"github.com/paqetpremium/paqetpremium/internal/metrics"
+	"github.com/paqetpremium/paqetpremium/internal/protocol"
 	"github.com/paqetpremium/paqetpremium/internal/tunnelpool"
 	"github.com/xtaci/smux"
 )
@@ -188,7 +189,7 @@ func (m *Manager) serveUDP(ctx context.Context, rule Rule) {
 			continue
 		}
 
-		if _, err := strm.Write(buf[:n]); err != nil {
+		if err := protocol.WriteDatagram(strm, buf[:n]); err != nil {
 			if m.metrics != nil {
 				m.metrics.IncError()
 			}
@@ -220,7 +221,7 @@ func (m *Manager) pumpUDP(ctx context.Context, strm *smux.Stream, conn *net.UDPC
 		default:
 		}
 		_ = strm.SetReadDeadline(time.Now().Add(8 * time.Second))
-		n, err := strm.Read(buf)
+		n, err := protocol.ReadDatagram(strm, buf)
 		_ = strm.SetReadDeadline(time.Time{})
 		if err != nil {
 			return
