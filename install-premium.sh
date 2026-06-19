@@ -277,6 +277,18 @@ gen_secret() {
   else tr -dc 'a-f0-9' </dev/urandom | head -c 32; echo; fi
 }
 
+# Best-effort detection of the host's public IPv4 (for NAT-aware guidance).
+detect_public_ip() {
+  local ip svc
+  for svc in "https://api.ipify.org" "https://ifconfig.me" "https://ip.sb" "https://ipinfo.io/ip"; do
+    ip="$(curl -fsS --max-time 5 "$svc" 2>/dev/null | tr -dc '0-9.')"
+    if [[ "$ip" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+      printf '%s' "$ip"; return 0
+    fi
+  done
+  return 1
+}
+
 prompt() {  # prompt <var> <question> [default]
   local __var="$1" __q="$2" __def="${3:-}" __ans=""
   if [[ -n "$__def" ]]; then
@@ -543,6 +555,15 @@ wizard_server() {
   healthcheck "${CFG_ADMIN}"
   hr
   ok "Server is up. Secret key: ${C_BLD}${CFG_KEY}${C_NC}"
+  local pub; pub="$(detect_public_ip || true)"
+  if [[ -n "$pub" && "$pub" != "${CFG_IPV4}" ]]; then
+    warn "This server appears to be behind NAT:"
+    warn "  interface IP : ${CFG_IPV4}  (used internally by the pcap engine — keep as-is)"
+    warn "  public IP    : ${pub}"
+    ok   "On the CLIENT use this server address:  ${C_BLD}${pub}:${CFG_PORT}${C_NC}   (NOT ${CFG_IPV4})"
+  else
+    ok   "On the CLIENT use this server address:  ${C_BLD}${CFG_IPV4}:${CFG_PORT}${C_NC}"
+  fi
   info "Manage: systemctl status ${BIN_NAME}-server | journalctl -u ${BIN_NAME}-server -f"
 }
 
@@ -551,8 +572,12 @@ wizard_client() {
   banner; hr; info "Client (Iran / entry) setup"; hr
   provision_binary
   ask_common_network
-  prompt CFG_SERVER_ADDR "Server address (host:port)" ""
+  prompt CFG_SERVER_ADDR "Server PUBLIC address (host:port)" ""
   [[ -n "${CFG_SERVER_ADDR}" ]] || err "Server address is required."
+  case "${CFG_SERVER_ADDR%%:*}" in
+    10.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[0-1].*|127.*)
+      warn "That looks like a private/LAN address. If the server is behind NAT, use its PUBLIC IP here, not the internal one." ;;
+  esac
   ask_transport
   prompt CFG_KEY "Shared secret key (SAME as server)" ""
   [[ -n "${CFG_KEY}" ]] || err "Shared secret key is required."
