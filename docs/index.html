@@ -11,25 +11,35 @@
 <script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
 <style>
 :root{
-  --bg:#0b0e14;--bg2:#0e131c;--panel:#121826;--panel2:#161d2c;--line:#1f2937;
-  --txt:#e6edf3;--mut:#9aa6b2;--brand:#a78bfa;--brand2:#7c6cf0;--acc:#2dd4bf;--ok:#34d399;--warn:#fbbf24;
+  --bg:#061229;--panel:#0e1f3d;--panel2:#12264a;--line:#1d3a63;
+  --txt:#e6f0fb;--mut:#93a7c4;--brand:#38bdf8;--brand2:#22d3ee;--acc:#22d3ee;--ok:#34d399;--warn:#fbbf24;
 }
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:radial-gradient(1200px 600px at 80% -10%,rgba(124,108,240,.18),transparent),var(--bg);color:var(--txt);font-family:Inter,system-ui,Segoe UI,Roboto,sans-serif;line-height:1.6}
+html{scroll-behavior:smooth;overflow-x:hidden}
+body{margin:0;color:var(--txt);font-family:Inter,system-ui,Segoe UI,Roboto,sans-serif;line-height:1.6;overflow-x:hidden;
+  background:
+    radial-gradient(900px 520px at 12% -6%, rgba(56,189,248,.30), transparent 60%),
+    radial-gradient(1100px 700px at 88% 115%, rgba(14,165,233,.12), transparent 60%),
+    linear-gradient(160deg,#0a2350 0%,#08183a 55%,#050d1f 100%);
+  background-attachment:fixed}
+body::before{content:"";position:fixed;inset:0;z-index:-1;pointer-events:none;
+  background-image:radial-gradient(rgba(120,180,240,.10) 1px,transparent 1px);
+  background-size:26px 26px;
+  -webkit-mask-image:radial-gradient(circle at 18% 2%,#000,transparent 68%);
+  mask-image:radial-gradient(circle at 18% 2%,#000,transparent 68%)}
 body[dir=rtl]{font-family:Vazirmatn,Inter,system-ui,sans-serif}
 a{color:var(--acc);text-decoration:none}
 a:hover{text-decoration:underline}
 .wrap{max-width:1040px;margin:0 auto;padding:0 20px}
 code,pre{font-family:'JetBrains Mono',ui-monospace,monospace}
 /* nav */
-nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(11,14,20,.7);border-bottom:1px solid var(--line)}
+nav{position:sticky;top:0;z-index:20;backdrop-filter:blur(10px);background:rgba(6,18,41,.78);border-bottom:1px solid var(--line)}
 nav .wrap{display:flex;align-items:center;gap:16px;height:60px}
 .brand{font-weight:700;color:var(--brand);letter-spacing:.3px;font-size:18px}
 .nav-sp{flex:1}
 .nav a{color:var(--mut);font-size:14px}
 .btn{display:inline-block;padding:8px 14px;border-radius:10px;font-size:14px;font-weight:600;border:1px solid var(--line)}
-.btn-p{background:linear-gradient(135deg,var(--brand2),var(--brand));color:#0b0e14;border:0}
+.btn-p{background:linear-gradient(135deg,var(--brand2),var(--brand));color:#04101f;border:0}
 .btn-g{background:var(--panel);color:var(--txt)}
 .lang-toggle{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden}
 .lang-toggle button{background:transparent;color:var(--mut);border:0;padding:7px 12px;cursor:pointer;font:inherit;font-size:13px}
@@ -52,9 +62,10 @@ h2{font-size:28px;margin:0 0 6px}
 .card .ic{font-size:22px;margin-bottom:8px}
 .card p{margin:0;color:var(--mut);font-size:14px}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.two>*{min-width:0}
 @media(max-width:760px){.two{grid-template-columns:1fr}.hero h1{font-size:34px}}
-.codeblk{position:relative;background:#0a0d14;border:1px solid var(--line);border-radius:12px;margin:12px 0}
-.codeblk pre{margin:0;padding:16px 16px;overflow:auto;font-size:13px;color:#d7e0ea}
+.codeblk{position:relative;background:#08152e;border:1px solid var(--line);border-radius:12px;margin:12px 0;min-width:0;overflow:hidden}
+.codeblk pre{margin:0;padding:16px 44px;overflow-x:auto;font-size:13px;color:#d7e6f5;white-space:pre}
 .codeblk .copy{position:absolute;top:8px;inset-inline-end:8px;background:var(--panel2);color:var(--mut);border:1px solid var(--line);border-radius:8px;padding:4px 9px;font-size:12px;cursor:pointer}
 .codeblk .copy:hover{color:var(--txt)}
 .step{display:flex;gap:12px;align-items:flex-start;margin-bottom:10px}
@@ -63,7 +74,7 @@ table{width:100%;border-collapse:collapse;background:var(--panel);border:1px sol
 th,td{padding:11px 13px;text-align:start;border-bottom:1px solid var(--line);font-size:14px}
 th{color:var(--mut);font-size:12px;text-transform:uppercase;letter-spacing:.5px}
 tr:last-child td{border-bottom:0}
-.mermaid{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;text-align:center}
+.mermaid{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;text-align:center;overflow:auto}
 details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:4px 16px;margin:10px 0}
 summary{cursor:pointer;padding:12px 0;font-weight:600}
 details p{color:var(--mut)}
@@ -353,7 +364,7 @@ sudo ./install-premium.sh remove v2ray-1 # حذف یک تونلِ خاص</pre></
 </main>
 
 <script>
-mermaid.initialize({startOnLoad:true,theme:"dark",themeVariables:{primaryColor:"#161d2c",primaryBorderColor:"#7c6cf0",primaryTextColor:"#e6edf3",lineColor:"#2dd4bf",fontSize:"14px"}});
+mermaid.initialize({startOnLoad:true,theme:"dark",themeVariables:{primaryColor:"#12264a",primaryBorderColor:"#22d3ee",primaryTextColor:"#e6f0fb",lineColor:"#38bdf8",fontSize:"14px"}});
 function setLang(l){
   var en=document.getElementById("lang-en"),fa=document.getElementById("lang-fa");
   var root=document.getElementById("root");
