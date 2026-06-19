@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Website & docs
+    url: https://ipmartnetwork.github.io/paqetpremium/
+    about: Setup guide, configuration examples, and FAQ.
+  - name: Report a security vulnerability
+    url: https://github.com/iPmartNetwork/paqetpremium/security/advisories/new
+    about: Please disclose security issues privately, not as public issues.

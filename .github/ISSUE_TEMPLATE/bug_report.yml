@@ -1,0 +1,65 @@
+name: Bug report
+description: Report a problem with PaqetPremium so it can be fixed.
+title: "[bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug. **Do not include secrets**
+        (shared secrets, admin tokens, keys) in this report. Redact or use
+        placeholders.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `paqetpremium version`.
+      placeholder: PaqetPremium 0.15.0
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Role
+      description: Which side is affected?
+      options:
+        - client
+        - server
+        - both
+    validations:
+      required: true
+  - type: dropdown
+    id: transport
+    attributes:
+      label: Transport
+      options:
+        - kcp
+        - quic
+  - type: input
+    id: os_arch
+    attributes:
+      label: OS / architecture
+      placeholder: Ubuntu 24.04 / amd64
+  - type: textarea
+    id: what_happened
+    attributes:
+      label: What happened?
+      description: Describe the bug, including what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration (sanitized)
+      description: Paste your config with secrets removed.
+      render: yaml
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: journalctl -u paqetpremium-client|-server -n 50
+      render: shell
