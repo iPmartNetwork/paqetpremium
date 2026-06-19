@@ -311,6 +311,7 @@ CFG_NAME=""; CFG_IFACE=""; CFG_IPV4=""; CFG_IPV6=""; CFG_RMAC=""; CFG_RMAC6=""
 CFG_PORT=""; CFG_KEY=""; CFG_TRANSPORT="kcp"; CFG_CONN="6"
 CFG_STRATEGY="failover"; CFG_FWD_PORTS=""; CFG_SOCKS_PORT=""; CFG_SOCKS_BIND="127.0.0.1"
 CFG_ADMIN="127.0.0.1:9090"; CFG_TOKEN=""
+CFG_RANGE_ENABLED="no"; CFG_RANGE_TARGET=""; CFG_RANGE_PORTS=""; CFG_RANGE_EXCLUDE=""; CFG_RANGE_RPORT=""
 UP_NAMES=(); UP_IPS=(); UP_PORTS=(); UP_KEYS=(); UP_PRIOS=(); UP_WEIGHTS=()
 
 emit_transport() {
@@ -425,6 +426,16 @@ write_client_config() {
     if [[ -n "${CFG_SOCKS_PORT}" ]]; then
       echo "socks5:"
       echo "  - listen: \"${CFG_SOCKS_BIND}:${CFG_SOCKS_PORT}\""
+      echo
+    fi
+    if [[ "${CFG_RANGE_ENABLED}" == "yes" ]]; then
+      echo "range:"
+      echo "  enabled: true"
+      echo "  protocol: tcp"
+      echo "  redirect_port: ${CFG_RANGE_RPORT:-47999}"
+      echo "  target_host: \"${CFG_RANGE_TARGET:-127.0.0.1}\""
+      echo "  ports: \"${CFG_RANGE_PORTS:-1-65535}\""
+      echo "  exclude: \"${CFG_RANGE_EXCLUDE:-22}\""
       echo
     fi
     emit_network "yes"; echo
@@ -552,10 +563,27 @@ add_upstream_servers() {
   done
 }
 
+# Transparent "tunnel all ports" range mode (iptables REDIRECT + SO_ORIGINAL_DST).
+ask_range_mode() {
+  CFG_RANGE_ENABLED="no"
+  if ask_yes_no "Tunnel ALL inbound ports transparently to the server (range mode)?" "n"; then
+    CFG_RANGE_ENABLED="yes"
+    prompt CFG_RANGE_TARGET  "  Server-side target host (where services live)" "127.0.0.1"
+    prompt CFG_RANGE_PORTS   "  Ports to tunnel (range/list)" "1-65535"
+    prompt CFG_RANGE_EXCLUDE "  Exclude ports (comma; keep SSH!)" "22"
+    prompt CFG_RANGE_RPORT   "  Local redirect listener port" "47999"
+  fi
+}
+
 ask_client_services() {
-  prompt CFG_FWD_PORTS "Forward TCP ports (comma-separated, blank = none)" "443,8443"
-  prompt CFG_SOCKS_PORT "SOCKS5 listen port (blank = disabled)" "1080"
-  [[ -z "${CFG_FWD_PORTS}" && -z "${CFG_SOCKS_PORT}" ]] && err "Provide at least a forward port or a SOCKS5 port."
+  if [[ "${CFG_RANGE_ENABLED}" == "yes" ]]; then
+    CFG_FWD_PORTS=""; CFG_SOCKS_PORT=""
+    info "Range mode on - all ports are tunneled, skipping individual forward/SOCKS5."
+  else
+    prompt CFG_FWD_PORTS "Forward TCP ports (comma-separated, blank = none)" "443,8443"
+    prompt CFG_SOCKS_PORT "SOCKS5 listen port (blank = disabled)" "1080"
+    [[ -z "${CFG_FWD_PORTS}" && -z "${CFG_SOCKS_PORT}" ]] && err "Provide at least a forward port or a SOCKS5 port."
+  fi
   prompt CFG_ADMIN "Admin API listen" "127.0.0.1:9090"
   prompt CFG_TOKEN "Admin API token (blank = none)" ""
 }
@@ -615,6 +643,7 @@ wizard_client() {
   ask_common_network
   ask_transport
   add_upstream_servers
+  ask_range_mode
   ask_client_services
   CFG_NAME="iran-entry"
 
@@ -623,6 +652,9 @@ wizard_client() {
   for i in "${!UP_IPS[@]}"; do
     lines+=("upstream $((i + 1))=${UP_NAMES[$i]} ${UP_IPS[$i]}:${UP_PORTS[$i]} (prio ${UP_PRIOS[$i]}, w ${UP_WEIGHTS[$i]})")
   done
+  if [[ "${CFG_RANGE_ENABLED}" == "yes" ]]; then
+    lines+=("range=ALL ports ${CFG_RANGE_PORTS} -> ${CFG_RANGE_TARGET} (exclude ${CFG_RANGE_EXCLUDE}, via :${CFG_RANGE_RPORT})")
+  fi
   lines+=("forward=${CFG_FWD_PORTS:-none}" "socks5=${CFG_SOCKS_PORT:-disabled}" "admin=${CFG_ADMIN}")
   summary_card "${lines[@]}"
   ask_yes_no "Write config and start the service?" "y" || { warn "Cancelled."; return; }
@@ -650,6 +682,7 @@ wizard_add_tunnel() {
   ask_common_network
   ask_transport
   add_upstream_servers
+  ask_range_mode
   ask_client_services
   CFG_NAME="$name"
 

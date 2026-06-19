@@ -5,6 +5,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-06-19
+
+### Added
+- Transparent "tunnel all ports" range mode (client). A new `range:` config block installs an iptables nat REDIRECT for a port range (default `1-65535`, excluding SSH/22 and the redirect port) to a single local listener; each connection's original destination port is recovered via `SO_ORIGINAL_DST` and tunneled to `target_host:<port>` on the server. Reach any port on the server's localhost via the entry IP without per-port configuration. The client and multi-instance installer wizards offer it as "Tunnel ALL inbound ports transparently". The server needs no change (its relay already dials the per-connection target).
+
 ## [0.9.3] - 2026-06-19
 
 ### Fixed
