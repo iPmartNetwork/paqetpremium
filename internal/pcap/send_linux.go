@@ -5,6 +5,7 @@ package pcap
 import (
 	"encoding/binary"
 	"fmt"
+	"log/slog"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -122,7 +123,7 @@ func (h *sendHandle) writeIPv4(payload []byte, dst *net.UDPAddr) error {
 	if err := gopacket.SerializeLayers(buf, opts, eth, ip, tcp, gopacket.Payload(payload)); err != nil {
 		return err
 	}
-	return h.handle.WritePacketData(buf.Bytes())
+	return h.transmit(buf.Bytes(), dst)
 }
 
 func (h *sendHandle) writeIPv6(payload []byte, dst *net.UDPAddr) error {
@@ -153,7 +154,7 @@ func (h *sendHandle) writeIPv6(payload []byte, dst *net.UDPAddr) error {
 	if err := gopacket.SerializeLayers(buf, opts, eth, ip6, tcp, gopacket.Payload(payload)); err != nil {
 		return err
 	}
-	return h.handle.WritePacketData(buf.Bytes())
+	return h.transmit(buf.Bytes(), dst)
 }
 
 func (h *sendHandle) buildTCP(dstPort uint16, f netutil.TCPFlagSet) *layers.TCP {
@@ -201,6 +202,29 @@ func (h *sendHandle) buildTCP(dstPort uint16, f netutil.TCPFlagSet) *layers.TCP 
 		tcp.Ack = seq - (counter & 0x3ff) + 1400
 	}
 	return tcp
+}
+
+// transmit injects a fully-serialized frame and logs the first success and the
+// first failure. kcp-go swallows WriteTo errors, so without this a failing
+// injection would be invisible and present only as a stalled tunnel.
+var (
+	logSendOK  sync.Once
+	logSendErr sync.Once
+)
+
+func (h *sendHandle) transmit(frame []byte, dst *net.UDPAddr) error {
+	if err := h.handle.WritePacketData(frame); err != nil {
+		logSendErr.Do(func() {
+			slog.Default().Error("pcap transmit failed (tunnel cannot send)",
+				"iface", h.net.Interface.Name, "dst", dst.String(), "bytes", len(frame), "err", err)
+		})
+		return err
+	}
+	logSendOK.Do(func() {
+		slog.Default().Info("pcap transmit ok (first packet on wire)",
+			"iface", h.net.Interface.Name, "dst", dst.String(), "bytes", len(frame))
+	})
+	return nil
 }
 
 func (h *sendHandle) close() {

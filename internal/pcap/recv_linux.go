@@ -28,9 +28,13 @@ func newRecvHandle(net *config.NetworkRuntime) (*recvHandle, error) {
 		handle.Close()
 		return nil, fmt.Errorf("pcap direction in: %w", err)
 	}
-	filter := fmt.Sprintf("(tcp and dst port %d) or (ip6 and tcp and dst port %d)", net.Port, net.Port)
-	if net.IPv6 != nil && net.IPv6.Port != net.Port {
-		filter = fmt.Sprintf("%s or (ip6 and tcp and dst port %d)", filter, net.IPv6.Port)
+	filter := fmt.Sprintf("tcp and dst port %d", net.Port)
+	if net.IPv6 != nil {
+		p6 := net.IPv6.Port
+		if p6 == 0 {
+			p6 = net.Port
+		}
+		filter = fmt.Sprintf("(tcp and dst port %d) or (ip6 and tcp and dst port %d)", net.Port, p6)
 	}
 	if err := handle.SetBPFFilter(filter); err != nil {
 		handle.Close()

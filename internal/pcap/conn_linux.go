@@ -5,8 +5,10 @@ package pcap
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net"
 	"os"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -14,6 +16,8 @@ import (
 	"github.com/paqetpremium/paqetpremium/internal/config"
 	"github.com/paqetpremium/paqetpremium/internal/netutil"
 )
+
+var logReadErr sync.Once
 
 // Conn implements net.PacketConn over crafted TCP packets on a Linux interface.
 type Conn struct {
@@ -70,6 +74,9 @@ func (c *Conn) ReadFrom(buf []byte) (int, net.Addr, error) {
 			if errors.Is(err, pcap.NextErrorTimeoutExpired) {
 				continue
 			}
+			logReadErr.Do(func() {
+				slog.Default().Error("pcap read error (closing conn)", "err", err)
+			})
 			return 0, nil, err
 		}
 		if payload == nil {

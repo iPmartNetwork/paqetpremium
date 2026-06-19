@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Installer (`install-premium.sh`): removed an over-eager `set -e` + `ERR` trap (and a `BASH_COMMAND` typo) that aborted the interactive wizard with a cryptic "unbound variable" message right after a successful install, triggered by benign non-zero exits from detection commands (`awk ... exit` raising SIGPIPE under `pipefail`). Critical steps (Go/toolchain download, git clone, build, binary install) now fail explicitly and service starts are non-fatal with log hints.
 - Installer: NAT awareness. The server wizard now detects the host's public IPv4 and explicitly tells the operator which address to configure on the client, warning when the interface IP differs from the public IP (i.e. the server is behind NAT). The client wizard now prompts for the server's PUBLIC address and warns on obviously-private inputs. This prevents pointing the client at the server's internal/NAT IP, which silently dropped all tunnel traffic.
 
+## [0.9.1] - 2026-06-19
+
+### Added
+- pcap engine diagnostics: the transmit path now logs the first successful packet ("pcap transmit ok") and the first transmit failure ("pcap transmit failed") with the underlying error, and the receive path logs the first fatal read error. kcp-go swallows transmit errors, so this surfaces otherwise-invisible send failures for field debugging.
+
+### Fixed
+- pcap receive BPF filter no longer hard-codes an `ip6` clause when IPv6 is not configured; the `ip6` term is added only when an IPv6 address is present (matches the reference engine and avoids relying on libpcap IPv6 support on IPv4-only hosts).
+
 ## [0.9.0] - 2026-06-19
 
 This release makes the project build and run correctly on its only supported
