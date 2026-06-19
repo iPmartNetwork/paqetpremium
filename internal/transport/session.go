@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"time"
 
 	"github.com/paqetpremium/paqetpremium/internal/pcap"
 	"github.com/quic-go/quic-go"
@@ -62,8 +63,8 @@ func (s *Session) Close() error {
 func smuxConfig(opt Options) *smux.Config {
 	cfg := smux.DefaultConfig()
 	cfg.Version = 2
-	cfg.KeepAliveInterval = 2
-	cfg.KeepAliveTimeout = 8
+	cfg.KeepAliveInterval = 10 * time.Second
+	cfg.KeepAliveTimeout = 30 * time.Second
 	cfg.MaxFrameSize = 65535
 	cfg.MaxReceiveBuffer = opt.SmuxBuf
 	cfg.MaxStreamBuffer = opt.StreamBuf

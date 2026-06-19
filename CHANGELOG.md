@@ -5,6 +5,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.3] - 2026-06-19
+
+### Fixed
+- smux keepalive timeouts were assigned bare integers (`KeepAliveInterval = 2`, `KeepAliveTimeout = 8`). Because these fields are `time.Duration`, they were interpreted as 2 and 8 NANOSECONDS instead of seconds, so the keepalive watchdog fired immediately and tore down every smux session before any data could be exchanged. This produced `io: read/write on closed pipe` on the client and prevented the tunnel from ever establishing (the server logged "tunnel session accepted" but no stream ever completed). Corrected to a 10s keepalive interval and 30s timeout. This was the primary root cause of the "tunnel does not connect" failures.
+
 ## [0.9.2] - 2026-06-19
 
 ### Fixed
