@@ -41,12 +41,38 @@ func (p *Pool) Close() {
 }
 
 func (p *Pool) openStream() (*smux.Stream, error) {
-	if len(p.sessions) == 0 {
+	n := len(p.sessions)
+	if n == 0 {
 		return nil, fmt.Errorf("no tunnel sessions")
 	}
-	i := atomic.AddUint32(&p.idx, 1) - 1
-	sess := p.sessions[int(i)%len(p.sessions)]
-	return sess.Smux.OpenStream()
+	start := int(atomic.AddUint32(&p.idx, 1) - 1)
+	var lastErr error
+	for off := 0; off < n; off++ {
+		sess := p.sessions[(start+off)%n]
+		if sess == nil || sess.Smux == nil || sess.Smux.IsClosed() {
+			continue
+		}
+		strm, err := sess.Smux.OpenStream()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		return strm, nil
+	}
+	if lastErr != nil {
+		return nil, lastErr
+	}
+	return nil, fmt.Errorf("no live tunnel sessions")
+}
+
+// Alive reports whether the pool has at least one open session.
+func (p *Pool) Alive() bool {
+	for _, s := range p.sessions {
+		if s != nil && s.Smux != nil && !s.Smux.IsClosed() {
+			return true
+		}
+	}
+	return false
 }
 
 func (p *Pool) OpenTCP(target string) (*smux.Stream, error) {

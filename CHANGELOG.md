@@ -5,6 +5,14 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.14.0] - 2026-06-19
+
+### Added
+- Self-healing upstreams: when an upstream's tunnel sessions die (server restart, network blip, or keepalive timeout) the client now rebuilds that upstream's connection pool out-of-band with exponential backoff and marks it healthy again once a ping succeeds - no manual client restart needed. Previously a dead pool stayed down until the client process was restarted.
+
+### Changed
+- Connection pool now skips dead smux sessions when opening a stream (round-robins over live sessions only) and exposes an Alive() check, so a single dead session no longer fails new connections while other sessions are still up.
+
 ## [0.13.0] - 2026-06-19
 
 ### Added

@@ -17,8 +17,9 @@ import (
 type Manager struct {
 	cfg    *config.Config
 	log    *slog.Logger
-	health config.HealthSettings
-	strategy string
+	health      config.HealthSettings
+	strategy    string
+	remoteFlags []netutil.TCPFlagSet
 
 	mu      sync.RWMutex
 	entries map[string]*entry
@@ -31,12 +32,13 @@ type Manager struct {
 }
 
 type entry struct {
-	ep       config.UpstreamEndpoint
-	pool     *tunnelpool.Pool
-	healthy  bool
-	failures int
-	recovers int
-	lastRTT  time.Duration
+	ep           config.UpstreamEndpoint
+	pool         *tunnelpool.Pool
+	healthy      bool
+	failures     int
+	recovers     int
+	lastRTT      time.Duration
+	reconnecting atomic.Bool
 }
 
 func NewManager(ctx context.Context, cfg *config.Config, remoteFlags []netutil.TCPFlagSet, log *slog.Logger) (*Manager, error) {
@@ -47,13 +49,14 @@ func NewManager(ctx context.Context, cfg *config.Config, remoteFlags []netutil.T
 
 	runCtx, cancel := context.WithCancel(ctx)
 	m := &Manager{
-		cfg:      cfg,
-		log:      log,
-		health:   defaultHealth(cfg),
-		strategy: defaultStrategy(cfg),
-		entries:  make(map[string]*entry),
-		ctx:      runCtx,
-		cancel:   cancel,
+		cfg:         cfg,
+		log:         log,
+		health:      defaultHealth(cfg),
+		strategy:    defaultStrategy(cfg),
+		remoteFlags: remoteFlags,
+		entries:     make(map[string]*entry),
+		ctx:         runCtx,
+		cancel:      cancel,
 	}
 
 	for _, ep := range endpoints {
@@ -260,6 +263,9 @@ func (m *Manager) runHealthCheck() {
 					m.failoverLocked()
 				}
 			}
+			if !e.healthy && !e.reconnecting.Load() {
+				go m.reconnect(name)
+			}
 			continue
 		}
 
@@ -287,6 +293,86 @@ func (m *Manager) failoverLocked() {
 		}
 	}
 	m.log.Error("no healthy upstream available")
+}
+
+func (m *Manager) entryHealthyLocked(name string) bool {
+	e, ok := m.entries[name]
+	return ok && e.healthy
+}
+
+// reconnect rebuilds a dead upstream pool out-of-band (the data-path lock is
+// never held while dialing) and swaps it in once a ping succeeds, with
+// exponential backoff. Guarded so only one reconnect runs per entry at a time.
+func (m *Manager) reconnect(name string) {
+	m.mu.RLock()
+	e, ok := m.entries[name]
+	m.mu.RUnlock()
+	if !ok || !e.reconnecting.CompareAndSwap(false, true) {
+		return
+	}
+	defer e.reconnecting.Store(false)
+
+	backoff := time.Second
+	for {
+		select {
+		case <-m.ctx.Done():
+			return
+		default:
+		}
+
+		m.mu.RLock()
+		cur, ok := m.entries[name]
+		cfg := m.cfg
+		rf := m.remoteFlags
+		settled := ok && cur.healthy && cur.pool != nil && cur.pool.Alive()
+		m.mu.RUnlock()
+		if !ok || settled {
+			return
+		}
+
+		tcfg := cfg.TransportForKey(cur.ep.Key)
+		newPool, err := tunnelpool.Dial(m.ctx, cfg, cur.ep.Addr, tcfg, rf)
+		if err == nil {
+			if perr := newPool.PingWithTimeout(m.health.Timeout); perr != nil {
+				newPool.Close()
+				err = perr
+			}
+		}
+		if err != nil {
+			m.log.Warn("upstream reconnect failed", "name", name, "err", err, "retry_in", backoff)
+			select {
+			case <-m.ctx.Done():
+				return
+			case <-time.After(backoff):
+			}
+			if backoff < 30*time.Second {
+				backoff *= 2
+			}
+			continue
+		}
+
+		m.mu.Lock()
+		cur2, ok := m.entries[name]
+		if !ok {
+			m.mu.Unlock()
+			newPool.Close()
+			return
+		}
+		old := cur2.pool
+		cur2.pool = newPool
+		cur2.healthy = true
+		cur2.failures = 0
+		cur2.recovers = 0
+		if m.active == "" || !m.entryHealthyLocked(m.active) {
+			m.active = name
+		}
+		m.mu.Unlock()
+		if old != nil {
+			old.Close()
+		}
+		m.log.Info("upstream reconnected", "name", name, "addr", cur2.ep.Addr.String())
+		return
+	}
 }
 
 // PingAll pings every configured upstream and returns the first error encountered,
@@ -373,6 +459,7 @@ func (m *Manager) Reload(ctx context.Context, cfg *config.Config, remoteFlags []
 	m.cfg = cfg
 	m.health = defaultHealth(cfg)
 	m.strategy = defaultStrategy(cfg)
+	m.remoteFlags = remoteFlags
 	m.entries = newEntries
 	m.order = newOrder
 	if len(newOrder) > 0 {
