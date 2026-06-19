@@ -605,8 +605,12 @@ wizard_add_tunnel() {
   prompt name "Tunnel instance name (e.g. v2ray-1)" ""
   [[ -n "$name" ]] || err "Instance name is required."
   ask_common_network
-  prompt CFG_SERVER_ADDR "Server address (host:port)" ""
+  prompt CFG_SERVER_ADDR "Server PUBLIC address (host:port)" ""
   [[ -n "${CFG_SERVER_ADDR}" ]] || err "Server address is required."
+  case "${CFG_SERVER_ADDR%%:*}" in
+    10.*|192.168.*|172.1[6-9].*|172.2[0-9].*|172.3[0-1].*|127.*)
+      warn "That looks like a private/LAN address. If the server is behind NAT, use its PUBLIC IP here, not the internal one." ;;
+  esac
   ask_transport
   prompt CFG_KEY "Shared secret key" ""
   [[ -n "${CFG_KEY}" ]] || err "Shared secret key is required."
