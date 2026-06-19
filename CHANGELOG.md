@@ -5,6 +5,11 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- Installer per-tunnel management: `list tunnels` (detailed view with role, transport, upstream/forward/socks/range summary and live status), `edit [name]` (open a tunnel's config in $EDITOR, validate, and restart just that service), and `remove [name]` (delete a single tunnel's config + service without touching other tunnels or the binary). Available as menu items 4/5/6 and as `tunnels` / `edit` / `remove` subcommands.
+
 ## [0.15.0] - 2026-06-19
 
 ### Added

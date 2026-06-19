@@ -312,6 +312,7 @@ CFG_PORT=""; CFG_KEY=""; CFG_TRANSPORT="kcp"; CFG_CONN="6"
 CFG_STRATEGY="failover"; CFG_FWD_PORTS=""; CFG_SOCKS_PORT=""; CFG_SOCKS_BIND="127.0.0.1"
 CFG_ADMIN="127.0.0.1:9090"; CFG_TOKEN=""
 CFG_RANGE_ENABLED="no"; CFG_RANGE_TARGET=""; CFG_RANGE_PORTS=""; CFG_RANGE_EXCLUDE=""; CFG_RANGE_RPORT=""
+_CFG=""; _UNIT=""
 UP_NAMES=(); UP_IPS=(); UP_PORTS=(); UP_KEYS=(); UP_PRIOS=(); UP_WEIGHTS=()
 
 emit_transport() {
@@ -788,6 +789,102 @@ cmd_uninstall() {
   ask_yes_no "Also delete ${CONFIG_DIR}?" "n" && { rm -rf "${CONFIG_DIR}"; ok "Removed ${CONFIG_DIR}"; }
 }
 
+# tunnel_resolve maps a tunnel id (server | client | <instance>) to its config
+# file (_CFG) and systemd unit (_UNIT).
+tunnel_resolve() {
+  case "$1" in
+    server) _CFG="${CONFIG_DIR}/server.yaml"; _UNIT="${BIN_NAME}-server.service" ;;
+    client) _CFG="${CONFIG_DIR}/client.yaml"; _UNIT="${BIN_NAME}-client.service" ;;
+    *)      _CFG="${TUNNELS_DIR}/$1.yaml";    _UNIT="${BIN_NAME}-client@$1.service" ;;
+  esac
+}
+
+_yaml_get() {  # _yaml_get <file> <top-key> <sub-key>  (first match under a top block)
+  awk -v top="$2:" -v sub="$3:" '
+    $0 ~ "^"top {f=1; next}
+    f && /^[^[:space:]]/ {f=0}
+    f && index($0,sub) {gsub(/[ "\x27]/,"",$2); print $2; exit}
+  ' "$1" 2>/dev/null
+}
+
+_show_tunnel() {  # id configpath unit  -> prints a summary line; returns 1 if no config
+  local id="$1" cfg="$2" unit="$3"
+  [[ -f "$cfg" ]] || return 1
+  local st role proto detail feats=""
+  st="$(systemctl is-active "$unit" 2>/dev/null || echo unknown)"
+  role="$(awk -F': *' '/^role:/{print $2; exit}' "$cfg" 2>/dev/null)"
+  proto="$(_yaml_get "$cfg" transport protocol)"
+  if [[ "$role" == "server" ]]; then
+    detail="listen $(_yaml_get "$cfg" listen addr)"
+  else
+    local nup; nup="$(grep -cE '^[[:space:]]*- name:' "$cfg" 2>/dev/null)"
+    grep -q '^forward:' "$cfg" 2>/dev/null && feats="${feats}forward "
+    grep -q '^socks5:'  "$cfg" 2>/dev/null && feats="${feats}socks5 "
+    grep -A4 '^range:' "$cfg" 2>/dev/null | grep -q 'enabled:[[:space:]]*true' && feats="${feats}range "
+    detail="${nup} upstream(s)  ${feats}"
+  fi
+  local sc="$C_OK"; [[ "$st" == "active" ]] || sc="$C_WARN"
+  printf '   %s%-16s%s %s%-7s%s proto=%s%-5s%s %s %s[%s]%s\n' \
+    "$C_B" "$id" "$C_RST" "$C_MUT" "${role:-?}" "$C_RST" "$C_ACC" "${proto:-?}" "$C_RST" "$detail" "$sc" "$st" "$C_RST"
+  return 0
+}
+
+list_tunnels() {
+  section "Configured tunnels"
+  local any=0
+  _show_tunnel "server" "${CONFIG_DIR}/server.yaml" "${BIN_NAME}-server.service" && any=1
+  _show_tunnel "client" "${CONFIG_DIR}/client.yaml" "${BIN_NAME}-client.service" && any=1
+  if [[ -d "${TUNNELS_DIR}" ]]; then
+    local f base
+    for f in "${TUNNELS_DIR}"/*.yaml; do
+      [[ -e "$f" ]] || continue
+      base="$(basename "$f" .yaml)"
+      _show_tunnel "$base" "$f" "${BIN_NAME}-client@${base}.service" && any=1
+    done
+  fi
+  [[ "$any" -eq 1 ]] || info "No tunnels configured yet."
+}
+
+cmd_edit() {
+  require_root
+  local id="${1:-}"
+  if [[ -z "$id" ]]; then list_tunnels; prompt id "Tunnel to edit (server/client/<name>)" ""; fi
+  [[ -n "$id" ]] || { info "Cancelled."; return; }
+  tunnel_resolve "$id"
+  [[ -f "$_CFG" ]] || err "config not found: $_CFG"
+  "${EDITOR:-nano}" "$_CFG"
+  if [[ -x "${BIN_DIR}/${BIN_NAME}" ]]; then
+    "${BIN_DIR}/${BIN_NAME}" test -c "$_CFG" || warn "config test reported issues; review before restarting."
+  fi
+  if ask_yes_no "Restart ${_UNIT} to apply changes?" "y"; then
+    require_systemd
+    systemctl restart "$_UNIT" && ok "Restarted ${_UNIT}" || warn "restart failed; inspect: journalctl -u ${_UNIT} -e"
+  fi
+}
+
+cmd_remove() {
+  require_root; require_systemd
+  local id="${1:-}"
+  if [[ -z "$id" ]]; then list_tunnels; prompt id "Tunnel to DELETE (server/client/<name>)" ""; fi
+  [[ -n "$id" ]] || { info "Cancelled."; return; }
+  tunnel_resolve "$id"
+  [[ -f "$_CFG" ]] || err "config not found: $_CFG (nothing to delete)"
+  warn "This removes ONLY the '${id}' tunnel (its config + service). Other tunnels and the binary are kept."
+  ask_yes_no "Delete tunnel '${id}'?" "n" || { info "Cancelled."; return; }
+  systemctl disable --now "$_UNIT" >/dev/null 2>&1 || true
+  case "$id" in
+    server|client)
+      rm -f "${SERVICE_DIR}/${_UNIT}"
+      systemctl daemon-reload
+      ;;
+    *)
+      : # named instances share the templated unit; disabling + removing the config is enough
+      ;;
+  esac
+  rm -f "$_CFG"
+  ok "Tunnel '${id}' removed (service stopped/disabled, config deleted)."
+}
+
 # --------------------------------------------------------------------------- #
 # Menu + dispatch
 # --------------------------------------------------------------------------- #
@@ -795,27 +892,33 @@ menu() {
   clear 2>/dev/null || true
   banner
   printf '\n'
-  printf '   %s1%s) Install / configure  %sserver%s  (Kharej / exit)\n'  "$C_ACC" "$C_RST" "$C_DIM" "$C_RST"
-  printf '   %s2%s) Install / configure  %sclient%s  (Iran / entry, multi-upstream)\n' "$C_ACC" "$C_RST" "$C_DIM" "$C_RST"
-  printf '   %s3%s) Add named client tunnel (multi-instance)\n' "$C_ACC" "$C_RST"
-  printf '   %s4%s) Status\n'                 "$C_ACC" "$C_RST"
-  printf '   %s5%s) Follow logs\n'            "$C_ACC" "$C_RST"
-  printf '   %s6%s) Reload config (SIGHUP)\n' "$C_ACC" "$C_RST"
-  printf '   %s7%s) Restart service\n'        "$C_ACC" "$C_RST"
-  printf '   %s8%s) Update (from repo/release)\n' "$C_ACC" "$C_RST"
-  printf '   %s9%s) Uninstall\n'              "$C_ACC" "$C_RST"
-  printf '   %s0%s) Exit\n\n'                 "$C_ACC" "$C_RST"
+  printf '   %s1%s)  Install / configure  %sserver%s  (Kharej / exit)\n'  "$C_ACC" "$C_RST" "$C_DIM" "$C_RST"
+  printf '   %s2%s)  Install / configure  %sclient%s  (Iran / entry, multi-upstream)\n' "$C_ACC" "$C_RST" "$C_DIM" "$C_RST"
+  printf '   %s3%s)  Add named client tunnel (multi-instance)\n' "$C_ACC" "$C_RST"
+  printf '   %s4%s)  List tunnels\n'              "$C_ACC" "$C_RST"
+  printf '   %s5%s)  Edit a tunnel\n'             "$C_ACC" "$C_RST"
+  printf '   %s6%s)  Delete a tunnel\n'           "$C_ACC" "$C_RST"
+  printf '   %s7%s)  Status\n'                    "$C_ACC" "$C_RST"
+  printf '   %s8%s)  Follow logs\n'               "$C_ACC" "$C_RST"
+  printf '   %s9%s)  Reload config (SIGHUP)\n'    "$C_ACC" "$C_RST"
+  printf '   %s10%s) Restart service\n'           "$C_ACC" "$C_RST"
+  printf '   %s11%s) Update (from repo/release)\n' "$C_ACC" "$C_RST"
+  printf '   %s12%s) Uninstall (everything)\n'    "$C_ACC" "$C_RST"
+  printf '   %s0%s)  Exit\n\n'                    "$C_ACC" "$C_RST"
   local c; prompt c "Select" ""
   case "$c" in
     1) wizard_server ;;
     2) wizard_client ;;
     3) wizard_add_tunnel ;;
-    4) cmd_status ;;
-    5) local n; prompt n "Unit (server/client/<tunnel>, blank=auto)" ""; cmd_logs "$n" ;;
-    6) local n; prompt n "Unit (server/client/<tunnel>, blank=auto)" ""; cmd_reload "$n" ;;
-    7) local n; prompt n "Unit (server/client/<tunnel>, blank=auto)" ""; cmd_restart "$n" ;;
-    8) cmd_update ;;
-    9) cmd_uninstall ;;
+    4) list_tunnels ;;
+    5) cmd_edit "" ;;
+    6) cmd_remove "" ;;
+    7) cmd_status ;;
+    8) local n; prompt n "Unit (server/client/<tunnel>, blank=auto)" ""; cmd_logs "$n" ;;
+    9) local n; prompt n "Unit (server/client/<tunnel>, blank=auto)" ""; cmd_reload "$n" ;;
+    10) local n; prompt n "Unit (server/client/<tunnel>, blank=auto)" ""; cmd_restart "$n" ;;
+    11) cmd_update ;;
+    12) cmd_uninstall ;;
     0) exit 0 ;;
     *) warn "Invalid selection." ;;
   esac
@@ -832,6 +935,9 @@ Usage: sudo $0 [command] [arg]
   client        Guided client (Iran) setup - multi-upstream
   add-tunnel    Add a named client instance
   status|list   Show services / admin status
+  tunnels       List configured tunnels with details
+  edit   [name] Edit a tunnel config (server|client|<name>) and restart it
+  remove [name] Delete a single tunnel (config + service); keeps others
   logs   [unit] Follow logs (server|client|<tunnel>)
   reload [unit] Reload config via SIGHUP
   restart[unit] Restart a service
@@ -857,6 +963,9 @@ main() {
     add-tunnel) wizard_add_tunnel ;;
     status)     cmd_status ;;
     list)       list_units ;;
+    tunnels)    list_tunnels ;;
+    edit)       cmd_edit "${1:-}" ;;
+    remove|delete) cmd_remove "${1:-}" ;;
     logs)       cmd_logs "${1:-}" ;;
     reload)     cmd_reload "${1:-}" ;;
     restart)    cmd_restart "${1:-}" ;;
