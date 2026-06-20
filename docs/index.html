@@ -82,11 +82,35 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--mut);font-siz
 .note{background:rgba(251,191,36,.08);border:1px solid rgba(251,191,36,.25);border-radius:12px;padding:12px 14px;color:#f3d58a;font-size:14px}
 .lang{display:block}
 [hidden]{display:none!important}
+/* logo + hero art + dashboard preview */
+.logo{display:inline-flex;align-items:center;gap:9px}
+.logo svg{width:24px;height:24px;flex:none}
+.hero-art{position:absolute;top:64px;inset-inline-end:max(8px,calc(50% - 540px));width:460px;max-width:44vw;opacity:.6;pointer-events:none;z-index:0;filter:drop-shadow(0 0 46px rgba(34,211,238,.25))}
+.hero-art .pulse{animation:ppulse 2.6s ease-in-out infinite}
+@keyframes ppulse{0%,100%{opacity:.35}50%{opacity:1}}
+@media(max-width:860px){.hero-art{display:none}}
+.hero .wrap{position:relative;z-index:1}
+.dash-mock{margin-top:18px;background:linear-gradient(180deg,#0b1c3a,#0a1730);border:1px solid var(--line);border-radius:14px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.35)}
+.dm-top{display:flex;align-items:center;gap:8px;font-weight:600;margin-bottom:12px}
+.dm-top .dm-mut{color:var(--mut);font-weight:400;font-size:13px}
+.dm-dot{width:9px;height:9px;border-radius:50%;background:var(--ok);box-shadow:0 0 10px var(--ok)}
+.dm-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px}
+@media(max-width:560px){.dm-grid{grid-template-columns:repeat(2,1fr)}}
+.dm-card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px}
+.dm-k{color:var(--mut);font-size:11px;letter-spacing:.5px}
+.dm-v{font-size:18px;font-weight:600;margin-top:3px}
+.dm-v small{font-size:11px;color:var(--mut);font-weight:400}
+.dm-tbl{width:100%;border-collapse:collapse;font-size:13px}
+.dm-tbl th,.dm-tbl td{text-align:start;padding:7px 8px;border-bottom:1px solid var(--line)}
+.dm-tbl th{color:var(--mut);font-size:11px;text-transform:uppercase}
+.dm-tbl tr:last-child td{border-bottom:0}
+.dm-badge{padding:1px 8px;border-radius:999px;font-size:11px;font-weight:600}
+.dm-badge.ok{background:rgba(52,211,153,.15);color:var(--ok)}
 </style>
 </head>
 <body>
 <nav><div class="wrap">
-  <span class="brand">PaqetPremium</span>
+  <span class="brand logo"><svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="3" fill="#38bdf8"/><circle cx="4" cy="6" r="2" fill="#22d3ee"/><circle cx="20" cy="6" r="2" fill="#22d3ee"/><circle cx="4" cy="18" r="2" fill="#22d3ee"/><circle cx="20" cy="18" r="2" fill="#22d3ee"/><g stroke="#2dd4bf" stroke-width="1.2" opacity=".7"><line x1="12" y1="12" x2="4" y2="6"/><line x1="12" y1="12" x2="20" y2="6"/><line x1="12" y1="12" x2="4" y2="18"/><line x1="12" y1="12" x2="20" y2="18"/></g></svg>PaqetPremium</span>
   <span class="nav-sp"></span>
   <div class="lang-toggle">
     <button id="b-en" class="on" onclick="setLang('en')">EN</button>
@@ -94,6 +118,16 @@ footer{border-top:1px solid var(--line);padding:28px 0;color:var(--mut);font-siz
   </div>
   <a class="btn btn-g" href="https://github.com/iPmartNetwork/paqetpremium" target="_blank" rel="noopener">GitHub</a>
 </div></nav>
+
+<div class="hero-art" aria-hidden="true">
+<svg viewBox="0 0 460 420" width="460" height="420" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs><radialGradient id="hg" cx="38%" cy="30%" r="72%"><stop offset="0%" stop-color="#22d3ee" stop-opacity=".55"/><stop offset="100%" stop-color="#0a2350" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="210" cy="180" r="150" fill="url(#hg)"/>
+  <g stroke="#1d3a63" stroke-width="1" opacity=".7"><circle cx="210" cy="180" r="150"/><ellipse cx="210" cy="180" rx="150" ry="58"/><ellipse cx="210" cy="180" rx="58" ry="150"/><ellipse cx="210" cy="180" rx="110" ry="150"/></g>
+  <g stroke="#2dd4bf" stroke-width="1" opacity=".45"><line x1="92" y1="120" x2="210" y2="58"/><line x1="210" y1="58" x2="330" y2="140"/><line x1="92" y1="120" x2="150" y2="270"/><line x1="150" y1="270" x2="270" y2="300"/><line x1="330" y1="140" x2="270" y2="300"/><line x1="210" y1="58" x2="150" y2="270"/></g>
+  <g fill="#38bdf8"><circle cx="92" cy="120" r="4"/><circle cx="330" cy="140" r="4"/><circle cx="150" cy="270" r="4"/><circle class="pulse" cx="210" cy="58" r="5"/><circle class="pulse" cx="270" cy="300" r="5"/></g>
+</svg>
+</div>
 
 <!-- ENGLISH -->
 <main id="lang-en" class="lang">
@@ -209,6 +243,19 @@ sudo rpm  -i paqetpremium-*.rpm     # RHEL / Fedora</pre></div>
   <section><div class="wrap">
     <h2>Dashboard & management</h2>
     <p class="lead">A live dark dashboard ships in the admin API (bound to 127.0.0.1). View it over SSH:</p>
+    <div class="dash-mock">
+      <div class="dm-top"><span class="dm-dot"></span> PaqetPremium <span class="dm-mut">v0.15 · client · iran-entry</span></div>
+      <div class="dm-grid">
+        <div class="dm-card"><div class="dm-k">DOWN</div><div class="dm-v">4.2 GB <small>3.1 MB/s</small></div></div>
+        <div class="dm-card"><div class="dm-k">UP</div><div class="dm-v">1.8 GB <small>0.9 MB/s</small></div></div>
+        <div class="dm-card"><div class="dm-k">SESSIONS</div><div class="dm-v">6</div></div>
+        <div class="dm-card"><div class="dm-k">ERRORS</div><div class="dm-v">0</div></div>
+      </div>
+      <table class="dm-tbl"><tr><th>Upstream</th><th>Health</th><th>RTT</th></tr>
+        <tr><td>● kharej-1</td><td><span class="dm-badge ok">healthy</span></td><td>62.4 ms</td></tr>
+        <tr><td>kharej-2</td><td><span class="dm-badge ok">healthy</span></td><td>88.1 ms</td></tr>
+      </table>
+    </div>
     <div class="codeblk"><button class="copy">copy</button><pre>ssh -L 9090:127.0.0.1:9090 root@SERVER_IP
 # then open http://localhost:9090  (add ?token=... if a token is set)</pre></div>
     <p class="lead">Manage individual tunnels from the installer:</p>
@@ -343,6 +390,19 @@ sudo rpm  -i paqetpremium-*.rpm     # RHEL / فدورا</pre></div>
   <section><div class="wrap">
     <h2>داشبورد و مدیریت</h2>
     <p class="lead">یک داشبورد تیره‌ی زنده داخل Admin API هست (روی 127.0.0.1). با SSH ببینیدش:</p>
+    <div class="dash-mock">
+      <div class="dm-top"><span class="dm-dot"></span> PaqetPremium <span class="dm-mut">v0.15 · client · iran-entry</span></div>
+      <div class="dm-grid">
+        <div class="dm-card"><div class="dm-k">دانلود</div><div class="dm-v">4.2 GB <small>3.1 MB/s</small></div></div>
+        <div class="dm-card"><div class="dm-k">آپلود</div><div class="dm-v">1.8 GB <small>0.9 MB/s</small></div></div>
+        <div class="dm-card"><div class="dm-k">نشست‌ها</div><div class="dm-v">6</div></div>
+        <div class="dm-card"><div class="dm-k">خطاها</div><div class="dm-v">0</div></div>
+      </div>
+      <table class="dm-tbl"><tr><th>سرور</th><th>سلامت</th><th>تأخیر</th></tr>
+        <tr><td>● kharej-1</td><td><span class="dm-badge ok">سالم</span></td><td>62.4 ms</td></tr>
+        <tr><td>kharej-2</td><td><span class="dm-badge ok">سالم</span></td><td>88.1 ms</td></tr>
+      </table>
+    </div>
     <div class="codeblk"><button class="copy">کپی</button><pre>ssh -L 9090:127.0.0.1:9090 root@SERVER_IP
 # سپس باز کنید http://localhost:9090  (اگر توکن دارید ?token=... اضافه کنید)</pre></div>
     <p class="lead">مدیریتِ تک‌تونلی از نصب‌کننده:</p>
