@@ -266,6 +266,7 @@ func (c *Client) startAdmin(ctx context.Context, up *upstream.Manager) {
 	}, func() error {
 		return c.ReloadFromDisk(ctx)
 	})
+	srv.WithConfigEditor(c.cfgPath, func() *config.Config { return c.cfg.Load() })
 	go func() {
 		if err := srv.Run(ctx); err != nil && ctx.Err() == nil {
 			c.log.Error("admin server failed", "err", err)

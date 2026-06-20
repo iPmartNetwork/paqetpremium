@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Community health files: Contributor Covenant Code of Conduct, Contributing guide, Security policy, issue forms (bug/feature) with a chooser config, and a pull-request template.
 - Project landing page (GitHub Pages) at `docs/index.html`: a self-contained, bilingual (English/Persian, RTL) dark-theme site with an architecture diagram (Mermaid), feature overview, quick-start, configuration examples with copy buttons, strategy table, dashboard/management, and FAQ. Enable via repo Settings -> Pages -> Source: master /docs.
 - Installer per-tunnel management: `list tunnels` (detailed view with role, transport, upstream/forward/socks/range summary and live status), `edit [name]` (open a tunnel's config in $EDITOR, validate, and restart just that service), and `remove [name]` (delete a single tunnel's config + service without touching other tunnels or the binary). Available as menu items 4/5/6 and as `tunnels` / `edit` / `remove` subcommands.
+- Admin dashboard: in-process configuration viewer/editor (`GET`/`POST /api/v1/config`) with secret redaction, validation, atomic write, and live reload; new Config panel in the web dashboard.
 
 ### Changed
 - Documentation (`README.md` / `README.fa.md`) updated to cover transparent all-ports range mode, configurable KCP FEC and windows, the web dashboard, per-tunnel management commands, `.deb`/`.rpm` packages, self-healing upstream reconnect, and UDP-protocol support; version badge bumped to 0.15.0 and the status/roadmap refreshed.

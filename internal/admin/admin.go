@@ -16,27 +16,38 @@ import (
 const authHeader = "Authorization"
 
 type Status struct {
-	Core      string      `json:"core"`
-	Version   string      `json:"version"`
-	Role      string      `json:"role"`
-	Name      string      `json:"name"`
-	Strategy  string      `json:"strategy,omitempty"`
-	Active    string      `json:"active_upstream,omitempty"`
-	Listen    string      `json:"listen_port,omitempty"`
-	Sessions  int                  `json:"sessions,omitempty"`
-	Upstreams interface{}          `json:"upstreams,omitempty"`
-	Stats     *metrics.Snapshot    `json:"stats,omitempty"`
+	Core      string            `json:"core"`
+	Version   string            `json:"version"`
+	Role      string            `json:"role"`
+	Name      string            `json:"name"`
+	Strategy  string            `json:"strategy,omitempty"`
+	Active    string            `json:"active_upstream,omitempty"`
+	Listen    string            `json:"listen_port,omitempty"`
+	Sessions  int               `json:"sessions,omitempty"`
+	Upstreams interface{}       `json:"upstreams,omitempty"`
+	Stats     *metrics.Snapshot `json:"stats,omitempty"`
 }
 
 type Server struct {
-	cfg    *config.AdminConfig
-	log    *slog.Logger
-	status func() Status
-	reload func() error
+	cfg       *config.AdminConfig
+	log       *slog.Logger
+	status    func() Status
+	reload    func() error
+	cfgPath   string
+	getConfig func() *config.Config
 }
 
 func New(cfg *config.AdminConfig, log *slog.Logger, status func() Status, reload func() error) *Server {
 	return &Server{cfg: cfg, log: log, status: status, reload: reload}
+}
+
+// WithConfigEditor enables the in-process config view/edit API. path is the
+// config file on disk; get returns the currently running config (secrets are
+// redacted before being returned to clients).
+func (s *Server) WithConfigEditor(path string, get func() *config.Config) *Server {
+	s.cfgPath = path
+	s.getConfig = get
+	return s
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -50,6 +61,9 @@ func (s *Server) Run(ctx context.Context) error {
 	mux.HandleFunc("/api/v1/status", s.auth(s.handleStatus))
 	if s.reload != nil {
 		mux.HandleFunc("/api/v1/reload", s.auth(s.handleReload))
+	}
+	if s.configEditor() {
+		mux.HandleFunc("/api/v1/config", s.auth(s.handleConfig))
 	}
 	if s.cfg.Metrics {
 		mux.HandleFunc("/metrics", s.auth(s.handleMetrics))

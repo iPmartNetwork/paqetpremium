@@ -32,6 +32,16 @@ tr:last-child td{border-bottom:0}
 .foot{color:var(--mut);font-size:12px;margin-top:14px}
 .err{color:var(--bad)}
 h2{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;margin:18px 0 8px}
+.cfg{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;margin-top:8px}
+.cfgbar{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+button{background:var(--brand);color:#0e1116;border:0;border-radius:8px;padding:7px 12px;font-weight:600;cursor:pointer;font-size:13px}
+button:hover{filter:brightness(1.08)}
+button.ghost{background:transparent;color:var(--brand);border:1px solid var(--line)}
+#cfgText{width:100%;min-height:320px;background:#0b0f14;color:#e6edf3;border:1px solid var(--line);border-radius:8px;padding:12px;font:12px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;resize:vertical}
+.cfgmsg{font-size:12px;color:var(--mut)}
+.cfgmsg.ok{color:var(--ok)}
+.cfgmsg.err{color:var(--bad)}
+.cfgnote{color:var(--mut);font-size:12px;margin-top:8px}
 </style>
 </head>
 <body>
@@ -40,6 +50,16 @@ h2{font-size:13px;color:var(--mut);text-transform:uppercase;letter-spacing:.5px;
   <div class="meta" id="meta">connecting...</div>
   <div class="grid" id="cards"></div>
   <div id="upstreams"></div>
+  <h2>Configuration</h2>
+  <div class="cfg">
+    <div class="cfgbar">
+      <button id="cfgLoad" class="ghost">Reload from server</button>
+      <button id="cfgSave">Save &amp; Apply</button>
+      <span id="cfgMsg" class="cfgmsg"></span>
+    </div>
+    <textarea id="cfgText" spellcheck="false" placeholder="loading config..."></textarea>
+    <div class="cfgnote">Secrets are shown as ***REDACTED*** — leave them unchanged to keep the current value. Saving validates the config, writes it to disk, and reloads the running service.</div>
+  </div>
   <div class="foot" id="foot"></div>
 </div>
 <script>
@@ -87,6 +107,29 @@ function render(s){
   document.getElementById('upstreams').innerHTML=html;
   document.getElementById('foot').textContent='updated '+new Date().toLocaleTimeString();
 }
+function cfgURL(){return '/api/v1/config'+(token?('?token='+encodeURIComponent(token)):'');}
+async function cfgLoad(){
+  const m=document.getElementById('cfgMsg');m.textContent='loading...';m.className='cfgmsg';
+  try{
+    const r=await fetch(cfgURL(),{cache:'no-store'});
+    const t=await r.text();
+    if(!r.ok)throw new Error(t||('HTTP '+r.status));
+    document.getElementById('cfgText').value=t;
+    m.textContent='loaded';m.className='cfgmsg';
+  }catch(e){m.textContent='error: '+esc(e.message);m.className='cfgmsg err';}
+}
+async function cfgSave(){
+  const m=document.getElementById('cfgMsg');m.textContent='saving...';m.className='cfgmsg';
+  try{
+    const r=await fetch(cfgURL(),{method:'POST',headers:{'Content-Type':'application/x-yaml'},body:document.getElementById('cfgText').value});
+    const t=await r.text();
+    if(!r.ok)throw new Error(t||('HTTP '+r.status));
+    m.textContent='saved & applied';m.className='cfgmsg ok';
+  }catch(e){m.textContent='error: '+esc(e.message);m.className='cfgmsg err';}
+}
+document.getElementById('cfgLoad').addEventListener('click',cfgLoad);
+document.getElementById('cfgSave').addEventListener('click',cfgSave);
+cfgLoad();
 tick();setInterval(tick,2000);
 </script>
 </body>
