@@ -7,14 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.16.0] - 2026-06-22
+
 ### Added
 - Community health files: Contributor Covenant Code of Conduct, Contributing guide, Security policy, issue forms (bug/feature) with a chooser config, and a pull-request template.
 - Project landing page (GitHub Pages) at `docs/index.html`: a self-contained, bilingual (English/Persian, RTL) dark-theme site with an architecture diagram (Mermaid), feature overview, quick-start, configuration examples with copy buttons, strategy table, dashboard/management, and FAQ. Enable via repo Settings -> Pages -> Source: master /docs.
 - Installer per-tunnel management: `list tunnels` (detailed view with role, transport, upstream/forward/socks/range summary and live status), `edit [name]` (open a tunnel's config in $EDITOR, validate, and restart just that service), and `remove [name]` (delete a single tunnel's config + service without touching other tunnels or the binary). Available as menu items 4/5/6 and as `tunnels` / `edit` / `remove` subcommands.
 - Admin dashboard: in-process configuration viewer/editor (`GET`/`POST /api/v1/config`) with secret redaction, validation, atomic write, and live reload; new Config panel in the web dashboard.
+- Per-upstream transport override: each `upstream.servers[]` entry may carry an optional `transport:` block that overrides the global `transport`, so a single client can mix KCP and QUIC across upstreams. Omitted fields are inherited from the global transport (zero-value inheritance), and the per-server `key` is used as that upstream's secret. The installer client wizard now prompts a transport per upstream (default = the global choice) and emits per-server blocks only when they differ from the global protocol.
+- Kernel TCP RST suppression on the fake-TCP tunnel port via systemd-managed `iptables` rules (server `--sport`, client `--dport` per upstream port). The rules are idempotent (`-C` guard), tagged with a `paqetpremium` comment, added on service start (`ExecStartPre`) and removed on stop (`ExecStopPost`) and uninstall, mirrored with `ip6tables` when IPv6 is configured. This keeps stateful firewalls/DPI on Iran<->abroad paths from tearing down the flow while pcap capture stays intact.
 
 ### Changed
 - Documentation (`README.md` / `README.fa.md`) updated to cover transparent all-ports range mode, configurable KCP FEC and windows, the web dashboard, per-tunnel management commands, `.deb`/`.rpm` packages, self-healing upstream reconnect, and UDP-protocol support; version badge bumped to 0.15.0 and the status/roadmap refreshed.
+
+### Fixed
+- `paqetpremium test` no longer reports a false failure for range-mode clients: the forward/socks5 readiness check now also recognizes range mode (it fails only when none of forward, socks5, or range is configured) and reports the range configuration. The test command also reports the resolved transport protocol per upstream.
 
 ## [0.15.0] - 2026-06-19
 
@@ -104,5 +111,6 @@ installer/manager.
 - Dual transport: KCP or QUIC, selectable via `transport.protocol`.
 - SOCKS5 UDP ASSOCIATE; multi-upstream strategies and health checks; admin API, metrics, IPv6; reload/bench CLI; arm64 target.
 
+[0.16.0]: https://github.com/iPmartNetwork/paqetpremium/releases/tag/v0.16.0
 [0.9.0]: https://github.com/iPmartNetwork/paqetpremium/releases/tag/v0.9.0
 [0.8.0-dev]: https://github.com/iPmartNetwork/paqetpremium

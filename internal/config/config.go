@@ -43,9 +43,9 @@ type LogConfig struct {
 }
 
 type UpstreamConfig struct {
-	Strategy    string              `yaml:"strategy"`
-	HealthCheck HealthCheckConfig   `yaml:"health_check"`
-	Servers     []UpstreamServer    `yaml:"servers"`
+	Strategy    string            `yaml:"strategy"`
+	HealthCheck HealthCheckConfig `yaml:"health_check"`
+	Servers     []UpstreamServer  `yaml:"servers"`
 }
 
 type HealthCheckConfig struct {
@@ -56,18 +56,19 @@ type HealthCheckConfig struct {
 }
 
 type UpstreamServer struct {
-	Name     string `yaml:"name"`
-	Addr     string `yaml:"addr"`
-	Key      string `yaml:"key"`
-	Weight   int    `yaml:"weight"`
-	Priority int    `yaml:"priority"`
+	Name      string           `yaml:"name"`
+	Addr      string           `yaml:"addr"`
+	Key       string           `yaml:"key"`
+	Weight    int              `yaml:"weight"`
+	Priority  int              `yaml:"priority"`
+	Transport *TransportConfig `yaml:"transport,omitempty"`
 }
 
 type ForwardRule struct {
-	Listen        string `yaml:"listen"`
-	Target        string `yaml:"target"`
-	Protocol      string `yaml:"protocol"`
-	BindUpstream  string `yaml:"bind_upstream,omitempty"`
+	Listen       string `yaml:"listen"`
+	Target       string `yaml:"target"`
+	Protocol     string `yaml:"protocol"`
+	BindUpstream string `yaml:"bind_upstream,omitempty"`
 }
 
 type SOCKS5Rule struct {
@@ -147,10 +148,10 @@ type ListenConfig struct {
 }
 
 type NetworkConfig struct {
-	Interface string    `yaml:"interface"`
-	IPv4      IPv4Config `yaml:"ipv4"`
+	Interface string      `yaml:"interface"`
+	IPv4      IPv4Config  `yaml:"ipv4"`
 	IPv6      *IPv6Config `yaml:"ipv6,omitempty"`
-	TCP       TCPFlags  `yaml:"tcp"`
+	TCP       TCPFlags    `yaml:"tcp"`
 }
 
 type IPv4Config struct {
@@ -173,10 +174,10 @@ type ServerEndpoint struct {
 }
 
 type TransportConfig struct {
-	Protocol string      `yaml:"protocol"`
-	Conn     int         `yaml:"conn"`
-	KCP      KCPConfig   `yaml:"kcp"`
-	QUIC     QUICConfig  `yaml:"quic,omitempty"`
+	Protocol string     `yaml:"protocol"`
+	Conn     int        `yaml:"conn"`
+	KCP      KCPConfig  `yaml:"kcp"`
+	QUIC     QUICConfig `yaml:"quic,omitempty"`
 }
 
 type KCPConfig struct {
@@ -244,47 +245,8 @@ func (c *Config) Validate() error {
 		}
 	}
 
-	proto := strings.ToLower(strings.TrimSpace(c.Transport.Protocol))
-	if proto == "" {
-		proto = "kcp"
-		c.Transport.Protocol = proto
-	}
-	if proto != "kcp" && proto != "quic" {
-		return fmt.Errorf("transport.protocol: must be kcp or quic")
-	}
-	if c.Transport.Conn < 1 {
-		c.Transport.Conn = 6
-	}
-	if strings.TrimSpace(c.Transport.KCP.Key) == "" {
-		return fmt.Errorf("transport.kcp.key is required (shared secret for kcp and quic)")
-	}
-	if proto == "kcp" {
-		if strings.TrimSpace(c.Transport.KCP.Mode) == "" {
-			c.Transport.KCP.Mode = "fast"
-		}
-		if strings.TrimSpace(c.Transport.KCP.Block) == "" {
-			c.Transport.KCP.Block = "aes-128-gcm"
-		}
-		if c.Transport.KCP.MTU <= 0 {
-			c.Transport.KCP.MTU = 1150
-		}
-		if c.Transport.KCP.DataShard < 0 || c.Transport.KCP.ParityShard < 0 {
-			return fmt.Errorf("transport.kcp data_shard/parity_shard must be >= 0")
-		}
-		if c.Transport.KCP.ParityShard > 0 && c.Transport.KCP.DataShard == 0 {
-			return fmt.Errorf("transport.kcp.data_shard must be > 0 when parity_shard is set")
-		}
-		if c.Transport.KCP.DataShard+c.Transport.KCP.ParityShard > 255 {
-			return fmt.Errorf("transport.kcp data_shard+parity_shard must be <= 255")
-		}
-		if c.Transport.KCP.SndWnd < 0 || c.Transport.KCP.RcvWnd < 0 {
-			return fmt.Errorf("transport.kcp snd_wnd/rcv_wnd must be >= 0")
-		}
-	}
-	if proto == "quic" {
-		if strings.TrimSpace(c.Transport.QUIC.ALPN) == "" {
-			c.Transport.QUIC.ALPN = "paqetpremium"
-		}
+	if err := c.validateTransport(&c.Transport, "transport"); err != nil {
+		return err
 	}
 
 	switch c.Role {
@@ -340,6 +302,21 @@ func (c *Config) Validate() error {
 			if strings.TrimSpace(s.Key) == "" {
 				return fmt.Errorf("upstream.servers[%d].key is required", i)
 			}
+			if s.Transport != nil {
+				merged := mergeTransport(c.Transport, s.Transport)
+				if strings.TrimSpace(s.Key) != "" {
+					merged.KCP.Key = s.Key
+				} else {
+					merged.KCP.Key = c.Transport.KCP.Key
+				}
+				name := strings.TrimSpace(s.Name)
+				if name == "" {
+					name = fmt.Sprintf("upstream-%d", i+1)
+				}
+				if err := c.validateTransport(&merged, fmt.Sprintf("upstream %q", name)); err != nil {
+					return err
+				}
+			}
 		}
 	}
 
@@ -347,5 +324,55 @@ func (c *Config) Validate() error {
 		c.Log.Level = "info"
 	}
 
+	return nil
+}
+
+// validateTransport normalizes and validates a transport block in place,
+// applying the same defaults as the global transport (protocol default kcp,
+// conn default 6, kcp mode/block/mtu defaults, quic alpn default). Every
+// returned error is prefixed with label (e.g. "transport" or `upstream "x"`).
+func (c *Config) validateTransport(t *TransportConfig, label string) error {
+	proto := strings.ToLower(strings.TrimSpace(t.Protocol))
+	if proto == "" {
+		proto = "kcp"
+		t.Protocol = proto
+	}
+	if proto != "kcp" && proto != "quic" {
+		return fmt.Errorf("%s.protocol: must be kcp or quic", label)
+	}
+	if t.Conn < 1 {
+		t.Conn = 6
+	}
+	if strings.TrimSpace(t.KCP.Key) == "" {
+		return fmt.Errorf("%s.kcp.key is required (shared secret for kcp and quic)", label)
+	}
+	if proto == "kcp" {
+		if strings.TrimSpace(t.KCP.Mode) == "" {
+			t.KCP.Mode = "fast"
+		}
+		if strings.TrimSpace(t.KCP.Block) == "" {
+			t.KCP.Block = "aes-128-gcm"
+		}
+		if t.KCP.MTU <= 0 {
+			t.KCP.MTU = 1150
+		}
+		if t.KCP.DataShard < 0 || t.KCP.ParityShard < 0 {
+			return fmt.Errorf("%s.kcp data_shard/parity_shard must be >= 0", label)
+		}
+		if t.KCP.ParityShard > 0 && t.KCP.DataShard == 0 {
+			return fmt.Errorf("%s.kcp.data_shard must be > 0 when parity_shard is set", label)
+		}
+		if t.KCP.DataShard+t.KCP.ParityShard > 255 {
+			return fmt.Errorf("%s.kcp data_shard+parity_shard must be <= 255", label)
+		}
+		if t.KCP.SndWnd < 0 || t.KCP.RcvWnd < 0 {
+			return fmt.Errorf("%s.kcp snd_wnd/rcv_wnd must be >= 0", label)
+		}
+	}
+	if proto == "quic" {
+		if strings.TrimSpace(t.QUIC.ALPN) == "" {
+			t.QUIC.ALPN = "paqetpremium"
+		}
+	}
 	return nil
 }

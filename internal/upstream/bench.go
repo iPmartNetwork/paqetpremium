@@ -6,11 +6,11 @@ import (
 )
 
 type BenchResult struct {
-	Name   string        `json:"name"`
-	Addr   string        `json:"addr"`
-	RTT    time.Duration `json:"rtt"`
-	OK     bool          `json:"ok"`
-	Error  string        `json:"error,omitempty"`
+	Name  string        `json:"name"`
+	Addr  string        `json:"addr"`
+	RTT   time.Duration `json:"rtt"`
+	OK    bool          `json:"ok"`
+	Error string        `json:"error,omitempty"`
 }
 
 func (m *Manager) Benchmark(ctx context.Context, timeout time.Duration) []BenchResult {

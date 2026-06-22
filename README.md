@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/platform-linux%20amd64%20%7C%20arm64-blue" alt="platform">
   <img src="https://img.shields.io/badge/go-1.25%2B-00ADD8?logo=go&logoColor=white" alt="go">
   <img src="https://img.shields.io/badge/transport-KCP%20%7C%20QUIC-success" alt="transport">
-  <img src="https://img.shields.io/badge/version-0.15.0-informational" alt="version">
+  <img src="https://img.shields.io/badge/version-0.16.0-informational" alt="version">
   <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="license">
 </p>
 
@@ -230,6 +230,51 @@ upstream:
       priority: 2
 ```
 
+With load-balancing strategies (`round_robin`, `weighted`, `least_latency`) the
+client spreads connections across **all** healthy servers, so every exit must be
+able to serve the traffic it receives. Use `failover` (a single active exit, with
+the rest as standby) when only one server should carry traffic at a time — this is
+also the right choice for range mode unless every exit exposes the same target
+service (see the range-mode note below).
+
+### Per-upstream transport
+
+Each `upstream.servers[]` entry may include an optional `transport:` block that
+**overrides** the global `transport` for that upstream only. Fields you leave out
+are inherited from the global block (zero-value inheritance), so a per-upstream
+block stays small — set just the protocol (or whatever differs) and the rest comes
+from the global defaults. The per-server `key` is used as that upstream's secret.
+
+This lets a single Iran client reach different exits over different transports —
+for example one over KCP and another over QUIC — to adapt to different network
+paths and DPI conditions.
+
+```yaml
+transport:            # global defaults (still required)
+  protocol: kcp
+  conn: 6
+  kcp:
+    key: SHARED_SECRET
+    mtu: 1150
+upstream:
+  strategy: failover
+  servers:
+    - name: kharej-1   # inherits global kcp
+      addr: 1.2.3.4:20201
+      key: SHARED_SECRET
+      priority: 1
+    - name: kharej-2   # this one uses quic
+      addr: 5.6.7.8:20202
+      key: SHARED_SECRET
+      priority: 2
+      transport:
+        protocol: quic
+```
+
+> Each exit server still runs its **own single transport**; the client must match
+> each upstream's protocol to the server it points at. `paqetpremium test` reports
+> the resolved transport protocol per upstream so you can confirm the mapping.
+
 ### SOCKS5 (TCP + UDP)
 
 ```yaml
@@ -263,6 +308,12 @@ wizard option.
 
 > **Security:** this exposes every localhost port on the server through the entry
 > IP. Keep sensitive ports (databases, the admin API, etc.) in `exclude`.
+
+> **Strategy with range mode:** prefer `failover` (a single active exit) unless
+> **every** exit server exposes the **same** target service on the configured
+> `target_host`. Load-balancing strategies (`round_robin`, `weighted`,
+> `least_latency`) spread connections across servers, so any server that is
+> missing the target service will drop those connections.
 
 ### IPv6 (optional)
 
@@ -311,6 +362,30 @@ ssh -L 9090:127.0.0.1:9090 root@<server>
 - The shared secret is the trust anchor. KCP derives its block cipher key from it; QUIC pins a certificate derived deterministically from it on **both** client and server (mutual). Use a strong, unique secret and keep config files readable only by root (`0640`).
 - The admin API binds to `127.0.0.1` by default. If you expose it, always set `admin.token`.
 - The server applies `iptables`/`ip6tables` rules (NOTRACK + drop RST) on the tunnel port; ensure your firewall policy allows the chosen port.
+
+### Connection reset (RST) suppression
+
+On stateful or DPI-filtered paths (common between Iran and abroad), a middlebox
+can inject or trigger a kernel TCP **RST** on the fake-TCP tunnel port and tear
+the flow down. To prevent that, the installer adds an idempotent `iptables`
+`OUTPUT` rule (tagged with the comment `paqetpremium`) that **drops the kernel's
+TCP RST** on the tunnel port. The rule is tied to each service via systemd
+`ExecStartPre=` / `ExecStopPost=`, so it is created on start and removed on stop
+(and swept on uninstall). pcap still captures normally — it taps at `AF_PACKET`,
+before netfilter — so only the kernel's stray RST is suppressed.
+
+If you installed a **prebuilt binary** without the installer, add the rule
+manually:
+
+```bash
+# Server (drop RST sourced from the tunnel listen port)
+iptables -A OUTPUT -p tcp --sport <listen_port> --tcp-flags RST RST -j DROP
+
+# Client (drop RST destined to each upstream port — one rule per upstream port)
+iptables -A OUTPUT -p tcp --dport <upstream_port> --tcp-flags RST RST -j DROP
+```
+
+Mirror with `ip6tables` when you use IPv6.
 
 ## Project layout
 

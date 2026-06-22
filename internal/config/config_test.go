@@ -35,7 +35,7 @@ func TestValidateClientConfig(t *testing.T) {
 
 func TestValidateIPv6RequiresRouterMAC(t *testing.T) {
 	cfg := &Config{
-		Role: "server",
+		Role:   "server",
 		Listen: &ListenConfig{Addr: ":8888"},
 		Network: NetworkConfig{
 			Interface: "eth0",
@@ -56,7 +56,7 @@ func TestValidateIPv6RequiresRouterMAC(t *testing.T) {
 
 func TestValidateQUICConfig(t *testing.T) {
 	cfg := &Config{
-		Role: "server",
+		Role:   "server",
 		Listen: &ListenConfig{Addr: ":8888"},
 		Network: NetworkConfig{
 			Interface: "eth0",

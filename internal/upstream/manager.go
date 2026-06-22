@@ -15,8 +15,8 @@ import (
 )
 
 type Manager struct {
-	cfg    *config.Config
-	log    *slog.Logger
+	cfg         *config.Config
+	log         *slog.Logger
 	health      config.HealthSettings
 	strategy    string
 	remoteFlags []netutil.TCPFlagSet
@@ -60,8 +60,7 @@ func NewManager(ctx context.Context, cfg *config.Config, remoteFlags []netutil.T
 	}
 
 	for _, ep := range endpoints {
-		transport := cfg.TransportForKey(ep.Key)
-		pool, err := tunnelpool.Dial(runCtx, cfg, ep.Addr, transport, remoteFlags)
+		pool, err := tunnelpool.Dial(runCtx, cfg, ep.Addr, ep.Transport, remoteFlags)
 		if err != nil {
 			m.Close()
 			return nil, fmt.Errorf("upstream %q: %w", ep.Name, err)
@@ -330,8 +329,7 @@ func (m *Manager) reconnect(name string) {
 			return
 		}
 
-		tcfg := cfg.TransportForKey(cur.ep.Key)
-		newPool, err := tunnelpool.Dial(m.ctx, cfg, cur.ep.Addr, tcfg, rf)
+		newPool, err := tunnelpool.Dial(m.ctx, cfg, cur.ep.Addr, cur.ep.Transport, rf)
 		if err == nil {
 			if perr := newPool.PingWithTimeout(m.health.Timeout); perr != nil {
 				newPool.Close()
@@ -442,8 +440,7 @@ func (m *Manager) Reload(ctx context.Context, cfg *config.Config, remoteFlags []
 	newEntries := make(map[string]*entry, len(endpoints))
 	newOrder := make([]string, 0, len(endpoints))
 	for _, ep := range endpoints {
-		transport := cfg.TransportForKey(ep.Key)
-		pool, err := tunnelpool.Dial(ctx, cfg, ep.Addr, transport, remoteFlags)
+		pool, err := tunnelpool.Dial(ctx, cfg, ep.Addr, ep.Transport, remoteFlags)
 		if err != nil {
 			for _, e := range newEntries {
 				e.pool.Close()

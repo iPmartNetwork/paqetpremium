@@ -14,7 +14,7 @@ body:
     attributes:
       label: Version
       description: Output of `paqetpremium version`.
-      placeholder: PaqetPremium 0.15.0
+      placeholder: PaqetPremium 0.16.0
     validations:
       required: true
   - type: dropdown

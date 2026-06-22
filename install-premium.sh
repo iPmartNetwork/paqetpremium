@@ -313,7 +313,8 @@ CFG_STRATEGY="failover"; CFG_FWD_PORTS=""; CFG_SOCKS_PORT=""; CFG_SOCKS_BIND="12
 CFG_ADMIN="127.0.0.1:9090"; CFG_TOKEN=""
 CFG_RANGE_ENABLED="no"; CFG_RANGE_TARGET=""; CFG_RANGE_PORTS=""; CFG_RANGE_EXCLUDE=""; CFG_RANGE_RPORT=""
 _CFG=""; _UNIT=""
-UP_NAMES=(); UP_IPS=(); UP_PORTS=(); UP_KEYS=(); UP_PRIOS=(); UP_WEIGHTS=()
+UP_NAMES=(); UP_IPS=(); UP_PORTS=(); UP_KEYS=(); UP_PRIOS=(); UP_WEIGHTS=(); UP_TRANSPORTS=()
+RST_SPECS=()
 
 emit_transport() {
   echo "transport:"
@@ -411,6 +412,10 @@ write_client_config() {
       echo "      key: ${UP_KEYS[$i]}"
       echo "      priority: ${UP_PRIOS[$i]}"
       echo "      weight: ${UP_WEIGHTS[$i]}"
+      if [[ -n "${UP_TRANSPORTS[$i]:-}" && "${UP_TRANSPORTS[$i]}" != "${CFG_TRANSPORT}" ]]; then
+        echo "      transport:"
+        echo "        protocol: ${UP_TRANSPORTS[$i]}"
+      fi
     done
     echo
     if [[ -n "${CFG_FWD_PORTS}" ]]; then
@@ -450,8 +455,34 @@ write_client_config() {
 # --------------------------------------------------------------------------- #
 # systemd
 # --------------------------------------------------------------------------- #
+# build_rst_specs <role> -> fills RST_SPECS with iptables match-specs (each
+# beginning with the OUTPUT chain) used to drop the kernel's TCP RST on the
+# fake-TCP tunnel port. pcap still captures (it taps before netfilter).
+build_rst_specs() {
+  local role="$1"; RST_SPECS=()
+  if [[ "$role" == "server" ]]; then
+    [[ -n "${CFG_PORT:-}" ]] && RST_SPECS+=("OUTPUT -p tcp --sport ${CFG_PORT} --tcp-flags RST RST -j DROP -m comment --comment paqetpremium")
+  else
+    local p
+    for p in "${UP_PORTS[@]:-}"; do
+      [[ -n "$p" ]] && RST_SPECS+=("OUTPUT -p tcp --dport ${p} --tcp-flags RST RST -j DROP -m comment --comment paqetpremium")
+    done
+  fi
+}
+
 write_unit() {
   local unit="$1" desc="$2" cfg="$3"
+  # Build idempotent iptables ExecStartPre/ExecStopPost lines for each RST spec.
+  # The "-" prefix makes systemd treat failures as non-fatal so a missing
+  # iptables or a rule error never blocks service start/stop.
+  local rst_lines="" spec fw
+  for spec in "${RST_SPECS[@]:-}"; do
+    [[ -n "$spec" ]] || continue
+    for fw in iptables ${CFG_IPV6:+ip6tables}; do
+      rst_lines+="ExecStartPre=-/bin/sh -c \"${fw} -C ${spec} 2>/dev/null || ${fw} -A ${spec}\""$'\n'
+      rst_lines+="ExecStopPost=-/bin/sh -c \"${fw} -D ${spec} 2>/dev/null || true\""$'\n'
+    done
+  done
   cat >"${SERVICE_DIR}/${unit}" <<EOF
 [Unit]
 Description=${desc}
@@ -463,7 +494,7 @@ Wants=network-online.target
 Type=simple
 ExecStart=${BIN_DIR}/${BIN_NAME} run -c ${cfg}
 ExecReload=/bin/kill -HUP \$MAINPID
-Restart=on-failure
+${rst_lines}Restart=on-failure
 RestartSec=5
 LimitNOFILE=1048576
 AmbientCapabilities=CAP_NET_RAW CAP_NET_ADMIN
@@ -476,6 +507,7 @@ EOF
 
 install_service() {
   local role="$1"
+  build_rst_specs "$role"
   write_unit "${BIN_NAME}-${role}.service" "${APP_NAME} ${role}" "${CONFIG_DIR}/${role}.yaml"
   systemctl enable "${BIN_NAME}-${role}.service" >/dev/null 2>&1 || true
   ok "Installed unit: ${BIN_NAME}-${role}.service"
@@ -537,7 +569,7 @@ ask_common_network() {
 }
 
 add_upstream_servers() {
-  UP_NAMES=(); UP_IPS=(); UP_PORTS=(); UP_KEYS=(); UP_PRIOS=(); UP_WEIGHTS=()
+  UP_NAMES=(); UP_IPS=(); UP_PORTS=(); UP_KEYS=(); UP_PRIOS=(); UP_WEIGHTS=(); UP_TRANSPORTS=()
   CFG_STRATEGY="$(choose 'Load-balancing strategy' failover round_robin weighted least_latency)"
   local def_key; def_key="$(gen_secret)"
   prompt CFG_KEY "Default shared secret key (must match the server)" "${def_key}"
@@ -556,8 +588,15 @@ add_upstream_servers() {
       failover|least_latency) prompt sprio "  Priority (lower = preferred)" "${idx}" ;;
       weighted) prompt sweight "  Weight" "1" ;;
     esac
+    local strans
+    if [[ "${CFG_TRANSPORT:-kcp}" == "quic" ]]; then
+      strans="$(choose "  Transport for ${sname}" quic kcp)"
+    else
+      strans="$(choose "  Transport for ${sname}" kcp quic)"
+    fi
     UP_NAMES+=("$sname"); UP_IPS+=("$sip"); UP_PORTS+=("$sport")
     UP_KEYS+=("$skey"); UP_PRIOS+=("$sprio"); UP_WEIGHTS+=("$sweight")
+    UP_TRANSPORTS+=("$strans")
     CFG_PORT="${sport}"
     idx=$((idx + 1))
     ask_yes_no "Add another upstream server?" "n" || break
@@ -658,6 +697,9 @@ wizard_client() {
   fi
   lines+=("forward=${CFG_FWD_PORTS:-none}" "socks5=${CFG_SOCKS_PORT:-disabled}" "admin=${CFG_ADMIN}")
   summary_card "${lines[@]}"
+  if [[ "${CFG_RANGE_ENABLED:-no}" == "yes" && "${#UP_IPS[@]}" -gt 1 && "${CFG_STRATEGY:-failover}" != "failover" ]]; then
+    warn "Range mode with strategy '${CFG_STRATEGY}' spreads connections across all upstreams. Every exit server MUST expose the same service on ${CFG_RANGE_TARGET:-127.0.0.1}, or some connections will fail. Use 'failover' if only one exit has the target service."
+  fi
   ask_yes_no "Write config and start the service?" "y" || { warn "Cancelled."; return; }
 
   write_client_config "${CONFIG_DIR}/client.yaml"
@@ -784,6 +826,18 @@ cmd_uninstall() {
   fi
   rm -f "${SERVICE_DIR}/${BIN_NAME}-client@.service"
   systemctl daemon-reload
+  # Sweep any leftover RST-suppression rules tagged with the paqetpremium
+  # comment (belt-and-suspenders; ExecStopPost already removes them on stop).
+  local fw
+  for fw in iptables ip6tables; do
+    command -v "$fw" >/dev/null 2>&1 || continue
+    while "$fw" -S OUTPUT 2>/dev/null | grep -q -- '--comment paqetpremium'; do
+      local rule
+      rule="$("$fw" -S OUTPUT 2>/dev/null | grep -- '--comment paqetpremium' | head -1 | sed 's/^-A //')"
+      [[ -n "$rule" ]] || break
+      eval "$fw -D $rule" 2>/dev/null || break
+    done
+  done
   rm -f "${BIN_DIR}/${BIN_NAME}"
   ok "Binary and services removed."
   ask_yes_no "Also delete ${CONFIG_DIR}?" "n" && { rm -rf "${CONFIG_DIR}"; ok "Removed ${CONFIG_DIR}"; }

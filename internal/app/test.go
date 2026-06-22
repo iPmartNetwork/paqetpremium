@@ -67,13 +67,26 @@ func TestConfig(path string) (*TestResult, error) {
 		if cfg.Upstream != nil {
 			add(len(cfg.Upstream.Servers) > 0, fmt.Sprintf("upstream servers: %d", len(cfg.Upstream.Servers)))
 		}
+		if cfg.Upstream != nil {
+			if eps, err := cfg.UpstreamEndpoints(); err == nil {
+				for _, ep := range eps {
+					add(true, fmt.Sprintf("upstream %s -> %s (%s)", ep.Name, ep.Addr, ep.Transport.Protocol))
+				}
+			}
+		}
 		if _, err := cfg.RemoteServerAddr(); err != nil {
 			add(false, err.Error())
 		} else {
 			addr, _ := cfg.RemoteServerAddr()
 			add(true, fmt.Sprintf("remote server: %s", addr))
 		}
-		add(len(cfg.Forward) > 0 || len(cfg.SOCKS5) > 0, "forward/socks5 rules configured")
+		rangeOn := cfg.Range != nil && cfg.Range.Enabled
+		hasRules := len(cfg.Forward) > 0 || len(cfg.SOCKS5) > 0 || rangeOn
+		add(hasRules, "forward/socks5/range rules configured")
+		if rangeOn {
+			add(true, fmt.Sprintf("range mode: ports=%s target=%s redirect=:%d",
+				cfg.Range.Ports, cfg.Range.TargetHost, cfg.Range.RedirectPort))
+		}
 	}
 
 	if platform.IsLinux() && nerr == nil {

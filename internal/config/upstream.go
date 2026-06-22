@@ -11,10 +11,10 @@ import (
 )
 
 const (
-	StrategyFailover      = "failover"
-	StrategyRoundRobin    = "round_robin"
-	StrategyWeighted      = "weighted"
-	StrategyLeastLatency  = "least_latency"
+	StrategyFailover     = "failover"
+	StrategyRoundRobin   = "round_robin"
+	StrategyWeighted     = "weighted"
+	StrategyLeastLatency = "least_latency"
 )
 
 type HealthSettings struct {
@@ -59,11 +59,12 @@ func (u *UpstreamConfig) NormalizedStrategy() string {
 
 // UpstreamEndpoint is a resolved upstream server entry.
 type UpstreamEndpoint struct {
-	Name     string
-	Addr     *net.UDPAddr
-	Key      string
-	Weight   int
-	Priority int
+	Name      string
+	Addr      *net.UDPAddr
+	Key       string
+	Weight    int
+	Priority  int
+	Transport TransportConfig
 }
 
 func (c *Config) UpstreamEndpoints() ([]UpstreamEndpoint, error) {
@@ -90,12 +91,15 @@ func (c *Config) UpstreamEndpoints() ([]UpstreamEndpoint, error) {
 			if priority < 1 {
 				priority = i + 1
 			}
+			tr := mergeTransport(c.Transport, s.Transport)
+			tr.KCP.Key = key
 			out = append(out, UpstreamEndpoint{
-				Name:     name,
-				Addr:     addr,
-				Key:      key,
-				Weight:   weight,
-				Priority: priority,
+				Name:      name,
+				Addr:      addr,
+				Key:       key,
+				Weight:    weight,
+				Priority:  priority,
+				Transport: tr,
 			})
 		}
 		sort.SliceStable(out, func(i, j int) bool {
@@ -113,11 +117,12 @@ func (c *Config) UpstreamEndpoints() ([]UpstreamEndpoint, error) {
 			return nil, err
 		}
 		return []UpstreamEndpoint{{
-			Name:     "default",
-			Addr:     addr,
-			Key:      c.Transport.KCP.Key,
-			Weight:   1,
-			Priority: 1,
+			Name:      "default",
+			Addr:      addr,
+			Key:       c.Transport.KCP.Key,
+			Weight:    1,
+			Priority:  1,
+			Transport: c.Transport,
 		}}, nil
 	}
 
@@ -140,6 +145,54 @@ func (c *Config) TransportForKey(key string) TransportConfig {
 	t := c.Transport
 	if key != "" {
 		t.KCP.Key = key
+	}
+	return t
+}
+
+// mergeTransport overlays the non-zero fields of override onto base.
+func mergeTransport(base TransportConfig, override *TransportConfig) TransportConfig {
+	t := base
+	if override == nil {
+		return t
+	}
+	if override.Protocol != "" {
+		t.Protocol = override.Protocol
+	}
+	if override.Conn > 0 {
+		t.Conn = override.Conn
+	}
+	if override.KCP.Mode != "" {
+		t.KCP.Mode = override.KCP.Mode
+	}
+	if override.KCP.Block != "" {
+		t.KCP.Block = override.KCP.Block
+	}
+	if override.KCP.Key != "" {
+		t.KCP.Key = override.KCP.Key
+	}
+	if override.KCP.MTU > 0 {
+		t.KCP.MTU = override.KCP.MTU
+	}
+	if override.KCP.DataShard > 0 {
+		t.KCP.DataShard = override.KCP.DataShard
+	}
+	if override.KCP.ParityShard > 0 {
+		t.KCP.ParityShard = override.KCP.ParityShard
+	}
+	if override.KCP.SndWnd > 0 {
+		t.KCP.SndWnd = override.KCP.SndWnd
+	}
+	if override.KCP.RcvWnd > 0 {
+		t.KCP.RcvWnd = override.KCP.RcvWnd
+	}
+	if override.QUIC.ALPN != "" {
+		t.QUIC.ALPN = override.QUIC.ALPN
+	}
+	if override.QUIC.IdleTimeout != "" {
+		t.QUIC.IdleTimeout = override.QUIC.IdleTimeout
+	}
+	if override.QUIC.MaxIdleTimeout != "" {
+		t.QUIC.MaxIdleTimeout = override.QUIC.MaxIdleTimeout
 	}
 	return t
 }
