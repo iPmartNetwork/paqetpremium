@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/platform-linux%20amd64%20%7C%20arm64-blue" alt="platform">
   <img src="https://img.shields.io/badge/go-1.25%2B-00ADD8?logo=go&logoColor=white" alt="go">
   <img src="https://img.shields.io/badge/transport-KCP%20%7C%20QUIC-success" alt="transport">
-  <img src="https://img.shields.io/badge/version-0.17.0-informational" alt="version">
+  <img src="https://img.shields.io/badge/version-0.18.0-informational" alt="version">
   <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="license">
 </p>
 
