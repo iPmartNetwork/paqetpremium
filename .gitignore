@@ -2,3 +2,6 @@
 /paqetpremium.exe
 /paqetpremium-linux-*
 *.exe
+
+# Kiro spec/state files (local only)
+.kiro/
