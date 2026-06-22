@@ -2,7 +2,9 @@ package tunnel
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"os"
@@ -177,6 +179,12 @@ func (s *Server) serveSession(ctx context.Context, sess *transport.Session, pcon
 	remote := sess.RemoteAddr()
 	s.log.Info("tunnel session accepted", "remote", remote)
 
+	var hub *dgramHub
+	if sess.DatagramsOK() {
+		hub = newDgramHub(sess, s.log)
+		go hub.recvLoop(ctx)
+	}
+
 	for {
 		if ctx.Err() != nil {
 			return
@@ -191,11 +199,11 @@ func (s *Server) serveSession(ctx context.Context, sess *transport.Session, pcon
 			return
 		}
 
-		go s.handleStream(ctx, strm, pconn, remote)
+		go s.handleStream(ctx, strm, pconn, remote, hub)
 	}
 }
 
-func (s *Server) handleStream(ctx context.Context, strm *smux.Stream, pconn *pcap.Conn, remote net.Addr) {
+func (s *Server) handleStream(ctx context.Context, strm *smux.Stream, pconn *pcap.Conn, remote net.Addr, hub *dgramHub) {
 	defer strm.Close()
 
 	var msg protocol.Message
@@ -227,6 +235,25 @@ func (s *Server) handleStream(ctx context.Context, strm *smux.Stream, pconn *pca
 		if err := relayUDP(ctx, strm, msg.Addr.String()); err != nil {
 			s.log.Debug("udp relay done", "dest", msg.Addr.String(), "err", err)
 		}
+	case protocol.UDPDGRAM:
+		if hub == nil || msg.Addr == nil {
+			return
+		}
+		flowID, conn, err := hub.openFlow(msg.Addr.String())
+		if err != nil {
+			s.log.Debug("udp datagram dial failed", "dest", msg.Addr.String(), "err", err)
+			return
+		}
+		defer hub.closeFlow(flowID)
+		// Reply on the control stream with the assigned 8-byte flowID.
+		if err := binary.Write(strm, binary.BigEndian, flowID); err != nil {
+			s.log.Debug("udp datagram flowid write failed", "dest", msg.Addr.String(), "err", err)
+			return
+		}
+		s.log.Info("udp datagram relay", "dest", msg.Addr.String(), "remote", remote, "flow", flowID)
+		go hub.flowReadTargetToClient(ctx, flowID, conn)
+		// Block on the control stream; when the client closes it, tear down.
+		_, _ = io.Copy(io.Discard, strm)
 	default:
 		s.log.Warn("unknown protocol type", "type", msg.Type)
 	}

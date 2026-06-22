@@ -7,28 +7,36 @@ import (
 
 // Collector holds process-wide traffic counters (safe for concurrent use).
 type Collector struct {
-	BytesIn      atomic.Uint64
-	BytesOut     atomic.Uint64
-	TCPAccepted  atomic.Uint64
-	TCPActive    atomic.Int64
-	UDPPackets   atomic.Uint64
-	RelayTCP     atomic.Uint64
-	RelayUDP     atomic.Uint64
-	Errors       atomic.Uint64
+	BytesIn         atomic.Uint64
+	BytesOut        atomic.Uint64
+	TCPAccepted     atomic.Uint64
+	TCPActive       atomic.Int64
+	UDPPackets      atomic.Uint64
+	RelayTCP        atomic.Uint64
+	RelayUDP        atomic.Uint64
+	UDPDgramFlows   atomic.Uint64
+	UDPDgramIn      atomic.Uint64
+	UDPDgramOut     atomic.Uint64
+	UDPDgramDropped atomic.Uint64
+	Errors          atomic.Uint64
 }
 
 // Default is the shared metrics collector for the running process.
 var Default = &Collector{}
 
 type Snapshot struct {
-	BytesIn     uint64 `json:"bytes_in"`
-	BytesOut    uint64 `json:"bytes_out"`
-	TCPAccepted uint64 `json:"tcp_accepted"`
-	TCPActive   int64  `json:"tcp_active"`
-	UDPPackets  uint64 `json:"udp_packets"`
-	RelayTCP    uint64 `json:"relay_tcp"`
-	RelayUDP    uint64 `json:"relay_udp"`
-	Errors      uint64 `json:"errors"`
+	BytesIn         uint64 `json:"bytes_in"`
+	BytesOut        uint64 `json:"bytes_out"`
+	TCPAccepted     uint64 `json:"tcp_accepted"`
+	TCPActive       int64  `json:"tcp_active"`
+	UDPPackets      uint64 `json:"udp_packets"`
+	RelayTCP        uint64 `json:"relay_tcp"`
+	RelayUDP        uint64 `json:"relay_udp"`
+	UDPDgramFlows   uint64 `json:"udp_dgram_flows"`
+	UDPDgramIn      uint64 `json:"udp_dgram_in"`
+	UDPDgramOut     uint64 `json:"udp_dgram_out"`
+	UDPDgramDropped uint64 `json:"udp_dgram_dropped"`
+	Errors          uint64 `json:"errors"`
 }
 
 func (c *Collector) Snapshot() Snapshot {
@@ -36,14 +44,18 @@ func (c *Collector) Snapshot() Snapshot {
 		return Snapshot{}
 	}
 	return Snapshot{
-		BytesIn:     c.BytesIn.Load(),
-		BytesOut:    c.BytesOut.Load(),
-		TCPAccepted: c.TCPAccepted.Load(),
-		TCPActive:   c.TCPActive.Load(),
-		UDPPackets:  c.UDPPackets.Load(),
-		RelayTCP:    c.RelayTCP.Load(),
-		RelayUDP:    c.RelayUDP.Load(),
-		Errors:      c.Errors.Load(),
+		BytesIn:         c.BytesIn.Load(),
+		BytesOut:        c.BytesOut.Load(),
+		TCPAccepted:     c.TCPAccepted.Load(),
+		TCPActive:       c.TCPActive.Load(),
+		UDPPackets:      c.UDPPackets.Load(),
+		RelayTCP:        c.RelayTCP.Load(),
+		RelayUDP:        c.RelayUDP.Load(),
+		UDPDgramFlows:   c.UDPDgramFlows.Load(),
+		UDPDgramIn:      c.UDPDgramIn.Load(),
+		UDPDgramOut:     c.UDPDgramOut.Load(),
+		UDPDgramDropped: c.UDPDgramDropped.Load(),
+		Errors:          c.Errors.Load(),
 	}
 }
 

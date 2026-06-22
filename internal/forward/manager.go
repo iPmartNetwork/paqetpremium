@@ -182,6 +182,31 @@ func (m *Manager) serveUDP(ctx context.Context, rule Rule) {
 			continue
 		}
 
+		// Datagram path: when the bound upstream is QUIC and datagram-capable,
+		// carry UDP over unreliable QUIC datagrams (no head-of-line blocking).
+		// The reverse direction is handled by the pool's per-session receive
+		// loop via the deliver closure, so there is no per-flow pump here.
+		if dg, ok := op.(tunnelpool.DatagramOpener); ok && dg.SupportsDatagrams() {
+			key := caddr.String() + "|" + rule.Target
+			client := caddr
+			deliver := func(p []byte) { _, _ = conn.WriteToUDP(p, client) }
+			send, _, err := dg.OpenUDPDatagram(key, rule.Target, deliver)
+			if err != nil {
+				m.log.Warn("udp datagram open", "target", rule.Target, "err", err)
+				continue
+			}
+			if err := send(buf[:n]); err != nil {
+				// Oversized or send failure: drop the packet (UDP is best-effort).
+				if m.metrics != nil {
+					m.metrics.UDPDgramDropped.Add(1)
+				}
+			} else if m.metrics != nil {
+				m.metrics.UDPDgramOut.Add(1)
+				m.metrics.BytesOut.Add(uint64(n))
+			}
+			continue
+		}
+
 		strm, isNew, key, err := op.OpenUDP(caddr.String(), rule.Target)
 		if err != nil {
 			m.log.Warn("udp forward stream", "target", rule.Target, "err", err)

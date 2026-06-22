@@ -92,6 +92,7 @@ function render(s){
     card('TCP active',st.tcp_active||0,'/ '+(st.tcp_accepted||0)+' total'),
     card('UDP pkts',st.udp_packets||0),
     card('Relay',(st.relay_tcp||0)+' tcp',(st.relay_udp||0)+' udp'),
+    card('UDP dgram',st.udp_dgram_flows||0,(st.udp_dgram_out||0)+' out / '+(st.udp_dgram_in||0)+' in, '+(st.udp_dgram_dropped||0)+' drop'),
     card('Errors',st.errors||0)
   ].join('');
   let up=s.upstreams,html='';

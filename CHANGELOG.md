@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- Unreliable UDP-over-QUIC-datagram transport ([RFC 9221](https://www.rfc-editor.org/rfc/rfc9221)): when a UDP forward rule's bound upstream resolves to the QUIC transport, each UDP packet now rides an independent unreliable QUIC datagram (per-flow demultiplexed, no reliability or ordering imposed) instead of the reliable smux stream. This removes the head-of-line blocking that previously broke WireGuard and collapsed QUIC-based protocols (Hysteria2/TUIC) carried over UDP forwarding. The exit relays each flow via a per-flow UDP socket to the configured target, flows are reused per (source+target) key and idle-reaped (~60s), and oversized datagrams (payload + header larger than the QUIC max datagram size) are dropped and counted — set the inner protocol MTU low enough to fit (e.g. WireGuard MTU around 1100 or lower). New `udp_dgram_*` metrics (`flows`, `in`, `out`, `dropped`), a dashboard "UDP dgram" card, and EN/FA docs cover the feature. KCP upstreams keep the existing reliable smux UDP relay (fine for simple/low-rate UDP, not for QUIC-based protocols).
+
 ## [0.17.0] - 2026-06-22
 
 ### Added

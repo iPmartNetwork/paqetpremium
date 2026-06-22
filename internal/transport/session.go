@@ -24,6 +24,33 @@ type Session struct {
 	Smux *smux.Session
 }
 
+// maxDatagramPayload is a conservative cap for the inner payload carried in a
+// QUIC DATAGRAM frame, accounting for the 8-byte flow header.
+const maxDatagramPayload = 1180 - 8
+
+// DatagramsOK reports whether this session can carry QUIC datagrams.
+func (s *Session) DatagramsOK() bool { return s.quicConn != nil }
+
+// SendDatagram sends an unreliable QUIC datagram (RFC 9221).
+func (s *Session) SendDatagram(b []byte) error {
+	if s.quicConn == nil {
+		return fmt.Errorf("datagrams not supported")
+	}
+	return s.quicConn.SendDatagram(b)
+}
+
+// ReceiveDatagram blocks until a QUIC datagram is received or ctx is done.
+func (s *Session) ReceiveDatagram(ctx context.Context) ([]byte, error) {
+	if s.quicConn == nil {
+		return nil, fmt.Errorf("datagrams not supported")
+	}
+	return s.quicConn.ReceiveDatagram(ctx)
+}
+
+// MaxDatagramPayload returns the largest inner payload that fits in a single
+// QUIC datagram after the 8-byte flow header.
+func (s *Session) MaxDatagramPayload() int { return maxDatagramPayload }
+
 func (s *Session) RemoteAddr() net.Addr {
 	if s.remoteAddr != nil {
 		return s.remoteAddr

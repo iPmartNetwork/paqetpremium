@@ -35,7 +35,14 @@ func Dial(ctx context.Context, cfg *config.Config, remote *net.UDPAddr, transpor
 		count = 1
 	}
 
-	pool := &Pool{udp: make(map[uint64]*smux.Stream)}
+	pool := &Pool{
+		ctx:       ctx,
+		udp:       make(map[uint64]*smux.Stream),
+		dgByKey:   make(map[string]func([]byte) error),
+		dgCtrl:    make(map[string]*smux.Stream),
+		dgDeliver: make(map[*transport.Session]map[uint64]func([]byte)),
+		dgRecv:    make(map[*transport.Session]bool),
+	}
 
 	for i := 0; i < count; i++ {
 		netRT, err := cfg.ResolveNetworkWithPort(0)

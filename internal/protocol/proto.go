@@ -11,11 +11,14 @@ import (
 type Type byte
 
 const (
-	Ping  Type = 0x01
-	Pong  Type = 0x02
-	TCPF  Type = 0x03
-	TCP   Type = 0x04
-	UDP   Type = 0x05
+	Ping Type = 0x01
+	Pong Type = 0x02
+	TCPF Type = 0x03
+	TCP  Type = 0x04
+	UDP  Type = 0x05
+	// UDPDGRAM carries a UDP forward target Addr (encoded exactly like UDP)
+	// to open a QUIC-datagram-based UDP flow over the control stream.
+	UDPDGRAM Type = 0x06
 )
 
 type TCPFlags = netutil.TCPFlagSet

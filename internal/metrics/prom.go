@@ -19,6 +19,10 @@ func WritePrometheus(w io.Writer, snap Snapshot, sessions int, upstreams any) {
 	_, _ = fmt.Fprintf(w, "paqetpremium_udp_packets_total %d\n", snap.UDPPackets)
 	_, _ = fmt.Fprintf(w, "paqetpremium_relay_tcp_total %d\n", snap.RelayTCP)
 	_, _ = fmt.Fprintf(w, "paqetpremium_relay_udp_total %d\n", snap.RelayUDP)
+	_, _ = fmt.Fprintf(w, "paqetpremium_udp_dgram_flows_total %d\n", snap.UDPDgramFlows)
+	_, _ = fmt.Fprintf(w, "paqetpremium_udp_dgram_in_total %d\n", snap.UDPDgramIn)
+	_, _ = fmt.Fprintf(w, "paqetpremium_udp_dgram_out_total %d\n", snap.UDPDgramOut)
+	_, _ = fmt.Fprintf(w, "paqetpremium_udp_dgram_dropped_total %d\n", snap.UDPDgramDropped)
 	_, _ = fmt.Fprintf(w, "paqetpremium_errors_total %d\n", snap.Errors)
 	WriteUpstream(w, upstreams)
 }

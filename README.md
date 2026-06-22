@@ -349,6 +349,47 @@ Key points:
 - **`bind_upstream` must match an `upstream.servers[].name`** — otherwise config
   validation fails fast with a clear error.
 
+### UDP protocols (WireGuard, Hysteria2)
+
+By default a UDP forward rule rides the same reliable, ordered **smux** path as
+TCP. That is the wrong shape for UDP-based protocols: a single reliable ordered
+stream imposes **head-of-line blocking** and retransmission that UDP neither
+expects nor wants. WireGuard degrades, and QUIC-based protocols (Hysteria2,
+TUIC) effectively collapse — they are running QUIC on top of a reliable stream.
+
+**Fix: bind the UDP inbound's upstream to a QUIC transport.** When the bound
+upstream's resolved transport is `quic`, PaqetPremium carries each UDP flow as
+**unreliable QUIC datagrams** ([RFC 9221](https://www.rfc-editor.org/rfc/rfc9221))
+— one datagram per UDP packet, demultiplexed per flow, with **no** reliability
+or ordering imposed. That is exactly the transport semantics these protocols
+want, so head-of-line blocking disappears.
+
+```yaml
+upstream:
+  servers:
+    - name: WG
+      addr: 5.6.7.8:22490
+      key: SECRET
+      priority: 1
+      transport:
+        protocol: quic       # UDP inbound -> bind it to a QUIC upstream
+forward:
+  - { listen: "0.0.0.0:51820", target: "127.0.0.1:51820", protocol: udp, bind_upstream: WG }
+```
+
+> **MTU guidance.** A single UDP packet must fit inside one QUIC datagram (no
+> fragmentation in this version). Set the **inner** protocol's MTU low enough to
+> fit the path — for WireGuard, an MTU around **1100 or lower** is a safe
+> starting point. Oversized datagrams are **dropped** (counted as
+> `udp_dgram_dropped`), so lower the inner MTU if you see drops.
+
+> **KCP upstreams** keep the reliable smux UDP relay. That is fine for simple,
+> low-rate UDP (e.g. DNS) but **not** for QUIC-based protocols — bind those to a
+> QUIC upstream as above.
+
+Watch datagram activity on the dashboard's **"UDP dgram"** card, or via the
+`paqetpremium_udp_dgram_*` Prometheus metrics (`flows`, `in`, `out`, `dropped`).
+
 ### IPv6 (optional)
 
 ```yaml

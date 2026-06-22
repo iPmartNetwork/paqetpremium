@@ -144,6 +144,19 @@ func (m *Manager) CloseUDP(key uint64) {
 	m.poolFor("").CloseUDP(key)
 }
 
+func (m *Manager) SupportsDatagrams() bool {
+	p := m.poolFor("")
+	return p != nil && p.SupportsDatagrams()
+}
+
+func (m *Manager) OpenUDPDatagram(key, target string, deliver func([]byte)) (func([]byte) error, bool, error) {
+	p := m.poolFor("")
+	if p == nil {
+		return nil, false, fmt.Errorf("no upstream available")
+	}
+	return p.OpenUDPDatagram(key, target, deliver)
+}
+
 func (m *Manager) poolFor(bind string) *tunnelpool.Pool {
 	m.mu.RLock()
 	defer m.mu.RUnlock()
@@ -428,6 +441,19 @@ func (b *boundOpener) CloseUDP(key uint64) {
 	if p := b.mgr.poolFor(b.name); p != nil {
 		p.CloseUDP(key)
 	}
+}
+
+func (b *boundOpener) SupportsDatagrams() bool {
+	p := b.mgr.poolFor(b.name)
+	return p != nil && p.SupportsDatagrams()
+}
+
+func (b *boundOpener) OpenUDPDatagram(key, target string, deliver func([]byte)) (func([]byte) error, bool, error) {
+	p := b.mgr.poolFor(b.name)
+	if p == nil {
+		return nil, false, fmt.Errorf("upstream %q unavailable", b.name)
+	}
+	return p.OpenUDPDatagram(key, target, deliver)
 }
 
 // Reload replaces upstream pools from a new config (hot reload).

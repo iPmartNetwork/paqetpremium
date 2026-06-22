@@ -17,6 +17,7 @@ func dialQUIC(ctx context.Context, addr *net.UDPAddr, opt Options, pconn net.Pac
 	qconf := &quic.Config{
 		MaxIdleTimeout:  opt.QUIC.MaxIdleTimeout,
 		KeepAlivePeriod: opt.QUIC.IdleTimeout,
+		EnableDatagrams: true,
 	}
 
 	tr := &quic.Transport{Conn: pconn}
@@ -67,6 +68,7 @@ func listenQUIC(opt Options, pconn net.PacketConn) (*quicListener, error) {
 	qconf := &quic.Config{
 		MaxIdleTimeout:  opt.QUIC.MaxIdleTimeout,
 		KeepAlivePeriod: opt.QUIC.IdleTimeout,
+		EnableDatagrams: true,
 	}
 
 	tr := &quic.Transport{Conn: pconn}
