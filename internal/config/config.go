@@ -289,6 +289,17 @@ func (c *Config) Validate() error {
 		if len(c.Forward) == 0 && len(c.SOCKS5) == 0 && (c.Range == nil || !c.Range.Enabled) {
 			return fmt.Errorf("client requires forward, socks5, or range rules")
 		}
+		names := c.upstreamNameSet()
+		for _, r := range c.Forward {
+			if bind := strings.TrimSpace(r.BindUpstream); bind != "" && !names[bind] {
+				return fmt.Errorf("forward rule %q: bind_upstream %q does not match any upstream", r.Listen, r.BindUpstream)
+			}
+		}
+		if c.Range != nil && c.Range.Enabled {
+			if bind := strings.TrimSpace(c.Range.BindUpstream); bind != "" && !names[bind] {
+				return fmt.Errorf("range.bind_upstream %q does not match any upstream", c.Range.BindUpstream)
+			}
+		}
 	}
 
 	if c.Upstream != nil {

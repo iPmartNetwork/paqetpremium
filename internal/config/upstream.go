@@ -204,6 +204,28 @@ func (c *Config) UpstreamStrategy() string {
 	return StrategyFailover
 }
 
+// upstreamNameSet returns the set of valid upstream names, derived exactly as
+// UpstreamEndpoints() derives them: each upstream.servers[i].name (falling back
+// to "upstream-<i+1>" when empty), or "default" for the legacy single
+// server.addr form.
+func (c *Config) upstreamNameSet() map[string]bool {
+	names := make(map[string]bool)
+	if c.Upstream != nil && len(c.Upstream.Servers) > 0 {
+		for i, s := range c.Upstream.Servers {
+			name := strings.TrimSpace(s.Name)
+			if name == "" {
+				name = fmt.Sprintf("upstream-%d", i+1)
+			}
+			names[name] = true
+		}
+		return names
+	}
+	if c.Server != nil && strings.TrimSpace(c.Server.Addr) != "" {
+		names["default"] = true
+	}
+	return names
+}
+
 func (c *Config) UpstreamNames() []string {
 	eps, err := c.UpstreamEndpoints()
 	if err != nil {

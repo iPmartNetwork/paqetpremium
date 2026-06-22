@@ -121,6 +121,16 @@ warn_if_private() {
   esac
 }
 
+validate_ports() {  # 0 if every comma item is an int in 1..65535 (blanks ok)
+  local csv="$1" p
+  IFS=',' read -ra _vp <<<"$csv"
+  for p in "${_vp[@]:-}"; do
+    p="${p// /}"; [[ -z "$p" ]] && continue
+    [[ "$p" =~ ^[0-9]+$ ]] && (( p>=1 && p<=65535 )) || return 1
+  done
+  return 0
+}
+
 # --------------------------------------------------------------------------- #
 # Pre-flight
 # --------------------------------------------------------------------------- #
@@ -313,7 +323,7 @@ CFG_STRATEGY="failover"; CFG_FWD_PORTS=""; CFG_SOCKS_PORT=""; CFG_SOCKS_BIND="12
 CFG_ADMIN="127.0.0.1:9090"; CFG_TOKEN=""
 CFG_RANGE_ENABLED="no"; CFG_RANGE_TARGET=""; CFG_RANGE_PORTS=""; CFG_RANGE_EXCLUDE=""; CFG_RANGE_RPORT=""
 _CFG=""; _UNIT=""
-UP_NAMES=(); UP_IPS=(); UP_PORTS=(); UP_KEYS=(); UP_PRIOS=(); UP_WEIGHTS=(); UP_TRANSPORTS=()
+UP_NAMES=(); UP_IPS=(); UP_PORTS=(); UP_KEYS=(); UP_PRIOS=(); UP_WEIGHTS=(); UP_TRANSPORTS=(); UP_TCP_PORTS=(); UP_UDP_PORTS=()
 RST_SPECS=()
 
 emit_transport() {
@@ -418,30 +428,30 @@ write_client_config() {
       fi
     done
     echo
-    if [[ -n "${CFG_FWD_PORTS}" ]]; then
-      echo "forward:"
-      local p; IFS=',' read -ra _ports <<<"${CFG_FWD_PORTS}"
-      for p in "${_ports[@]}"; do
-        p="${p// /}"; [[ -n "$p" ]] || continue
+    echo "forward:"
+    local i p
+    for i in "${!UP_IPS[@]}"; do
+      IFS=',' read -ra _tcp <<<"${UP_TCP_PORTS[$i]:-}"
+      for p in "${_tcp[@]:-}"; do
+        p="${p// /}"; [[ -z "$p" ]] && continue
         echo "  - listen: \"0.0.0.0:${p}\""
         echo "    target: \"127.0.0.1:${p}\""
         echo "    protocol: tcp"
+        echo "    bind_upstream: ${UP_NAMES[$i]}"
       done
-      echo
-    fi
+      IFS=',' read -ra _udp <<<"${UP_UDP_PORTS[$i]:-}"
+      for p in "${_udp[@]:-}"; do
+        p="${p// /}"; [[ -z "$p" ]] && continue
+        echo "  - listen: \"0.0.0.0:${p}\""
+        echo "    target: \"127.0.0.1:${p}\""
+        echo "    protocol: udp"
+        echo "    bind_upstream: ${UP_NAMES[$i]}"
+      done
+    done
+    echo
     if [[ -n "${CFG_SOCKS_PORT}" ]]; then
       echo "socks5:"
       echo "  - listen: \"${CFG_SOCKS_BIND}:${CFG_SOCKS_PORT}\""
-      echo
-    fi
-    if [[ "${CFG_RANGE_ENABLED}" == "yes" ]]; then
-      echo "range:"
-      echo "  enabled: true"
-      echo "  protocol: tcp"
-      echo "  redirect_port: ${CFG_RANGE_RPORT:-47999}"
-      echo "  target_host: \"${CFG_RANGE_TARGET:-127.0.0.1}\""
-      echo "  ports: \"${CFG_RANGE_PORTS:-1-65535}\""
-      echo "  exclude: \"${CFG_RANGE_EXCLUDE:-22}\""
       echo
     fi
     emit_network "yes"; echo
@@ -569,7 +579,7 @@ ask_common_network() {
 }
 
 add_upstream_servers() {
-  UP_NAMES=(); UP_IPS=(); UP_PORTS=(); UP_KEYS=(); UP_PRIOS=(); UP_WEIGHTS=(); UP_TRANSPORTS=()
+  UP_NAMES=(); UP_IPS=(); UP_PORTS=(); UP_KEYS=(); UP_PRIOS=(); UP_WEIGHTS=(); UP_TRANSPORTS=(); UP_TCP_PORTS=(); UP_UDP_PORTS=()
   CFG_STRATEGY="$(choose 'Load-balancing strategy' failover round_robin weighted least_latency)"
   local def_key; def_key="$(gen_secret)"
   prompt CFG_KEY "Default shared secret key (must match the server)" "${def_key}"
@@ -594,9 +604,24 @@ add_upstream_servers() {
     else
       strans="$(choose "  Transport for ${sname}" kcp quic)"
     fi
+    local stcp sudp=""
+    while :; do
+      prompt stcp "  TCP ports for ${sname} (comma list, e.g. 443,2050)" ""
+      validate_ports "$stcp" && break
+      warn "Invalid port list; use comma-separated numbers 1-65535."
+    done
+    if ask_yes_no "  Does ${sname} have UDP ports?" "n"; then
+      while :; do
+        prompt sudp "  UDP ports for ${sname} (comma list)" ""
+        validate_ports "$sudp" && break
+        warn "Invalid port list; use comma-separated numbers 1-65535."
+      done
+    fi
+    [[ -z "${stcp// /}" && -z "${sudp// /}" ]] && warn "${sname} has no ports; it will receive no traffic."
     UP_NAMES+=("$sname"); UP_IPS+=("$sip"); UP_PORTS+=("$sport")
     UP_KEYS+=("$skey"); UP_PRIOS+=("$sprio"); UP_WEIGHTS+=("$sweight")
     UP_TRANSPORTS+=("$strans")
+    UP_TCP_PORTS+=("$stcp"); UP_UDP_PORTS+=("$sudp")
     CFG_PORT="${sport}"
     idx=$((idx + 1))
     ask_yes_no "Add another upstream server?" "n" || break
@@ -616,14 +641,7 @@ ask_range_mode() {
 }
 
 ask_client_services() {
-  if [[ "${CFG_RANGE_ENABLED}" == "yes" ]]; then
-    CFG_FWD_PORTS=""; CFG_SOCKS_PORT=""
-    info "Range mode on - all ports are tunneled, skipping individual forward/SOCKS5."
-  else
-    prompt CFG_FWD_PORTS "Forward TCP ports (comma-separated, blank = none)" "443,8443"
-    prompt CFG_SOCKS_PORT "SOCKS5 listen port (blank = disabled)" "1080"
-    [[ -z "${CFG_FWD_PORTS}" && -z "${CFG_SOCKS_PORT}" ]] && err "Provide at least a forward port or a SOCKS5 port."
-  fi
+  prompt CFG_SOCKS_PORT "SOCKS5 listen port (blank = disabled)" ""
   prompt CFG_ADMIN "Admin API listen" "127.0.0.1:9090"
   prompt CFG_TOKEN "Admin API token (blank = none)" ""
 }
@@ -683,7 +701,6 @@ wizard_client() {
   ask_common_network
   ask_transport
   add_upstream_servers
-  ask_range_mode
   ask_client_services
   CFG_NAME="iran-entry"
 
@@ -691,15 +708,10 @@ wizard_client() {
   local i
   for i in "${!UP_IPS[@]}"; do
     lines+=("upstream $((i + 1))=${UP_NAMES[$i]} ${UP_IPS[$i]}:${UP_PORTS[$i]} (prio ${UP_PRIOS[$i]}, w ${UP_WEIGHTS[$i]})")
+    lines+=("ports ${UP_NAMES[$i]}=tcp:${UP_TCP_PORTS[$i]:-none} udp:${UP_UDP_PORTS[$i]:-none}")
   done
-  if [[ "${CFG_RANGE_ENABLED}" == "yes" ]]; then
-    lines+=("range=ALL ports ${CFG_RANGE_PORTS} -> ${CFG_RANGE_TARGET} (exclude ${CFG_RANGE_EXCLUDE}, via :${CFG_RANGE_RPORT})")
-  fi
-  lines+=("forward=${CFG_FWD_PORTS:-none}" "socks5=${CFG_SOCKS_PORT:-disabled}" "admin=${CFG_ADMIN}")
+  lines+=("socks5=${CFG_SOCKS_PORT:-disabled}" "admin=${CFG_ADMIN}")
   summary_card "${lines[@]}"
-  if [[ "${CFG_RANGE_ENABLED:-no}" == "yes" && "${#UP_IPS[@]}" -gt 1 && "${CFG_STRATEGY:-failover}" != "failover" ]]; then
-    warn "Range mode with strategy '${CFG_STRATEGY}' spreads connections across all upstreams. Every exit server MUST expose the same service on ${CFG_RANGE_TARGET:-127.0.0.1}, or some connections will fail. Use 'failover' if only one exit has the target service."
-  fi
   ask_yes_no "Write config and start the service?" "y" || { warn "Cancelled."; return; }
 
   write_client_config "${CONFIG_DIR}/client.yaml"
@@ -725,12 +737,16 @@ wizard_add_tunnel() {
   ask_common_network
   ask_transport
   add_upstream_servers
-  ask_range_mode
   ask_client_services
   CFG_NAME="$name"
 
-  summary_card "instance=${name}" "transport=${CFG_TRANSPORT}" "strategy=${CFG_STRATEGY}" \
-    "upstreams=${#UP_IPS[@]}" "forward=${CFG_FWD_PORTS:-none}" "socks5=${CFG_SOCKS_PORT:-disabled}"
+  local lines=("instance=${name}" "transport=${CFG_TRANSPORT}" "strategy=${CFG_STRATEGY}" "upstreams=${#UP_IPS[@]}")
+  local i
+  for i in "${!UP_IPS[@]}"; do
+    lines+=("ports ${UP_NAMES[$i]}=tcp:${UP_TCP_PORTS[$i]:-none} udp:${UP_UDP_PORTS[$i]:-none}")
+  done
+  lines+=("socks5=${CFG_SOCKS_PORT:-disabled}")
+  summary_card "${lines[@]}"
   ask_yes_no "Write config and start instance '${name}'?" "y" || { warn "Cancelled."; return; }
 
   write_client_config "${TUNNELS_DIR}/${name}.yaml"

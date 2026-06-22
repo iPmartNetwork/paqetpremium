@@ -11,7 +11,7 @@
   <img src="https://img.shields.io/badge/platform-linux%20amd64%20%7C%20arm64-blue" alt="platform">
   <img src="https://img.shields.io/badge/go-1.25%2B-00ADD8?logo=go&logoColor=white" alt="go">
   <img src="https://img.shields.io/badge/transport-KCP%20%7C%20QUIC-success" alt="transport">
-  <img src="https://img.shields.io/badge/version-0.16.0-informational" alt="version">
+  <img src="https://img.shields.io/badge/version-0.17.0-informational" alt="version">
   <img src="https://img.shields.io/badge/license-GPL--3.0-blue" alt="license">
 </p>
 
@@ -314,6 +314,40 @@ wizard option.
 > `target_host`. Load-balancing strategies (`round_robin`, `weighted`,
 > `least_latency`) spread connections across servers, so any server that is
 > missing the target service will drop those connections.
+
+### Multi-server port forwarding (per-exit)
+
+When your exit servers host **different** inbounds (for example a panel on one
+server and a node on another, each with its own ports), map each port to its
+exit with `forward` rules and `bind_upstream`. The installer client wizard asks
+each upstream's TCP ports, then (y/n) whether it also has UDP ports and which.
+It then emits one bound `forward` rule per port. This is genuinely multi-server:
+each port routes to its own exit, not a single active one.
+
+```yaml
+upstream:
+  servers:
+    - { name: DE, addr: 116.203.19.246:22490, key: SECRET, priority: 1 }
+    - { name: FN, addr: 157.180.65.244:22491, key: SECRET, priority: 2 }
+forward:
+  - { listen: "0.0.0.0:443",  target: "127.0.0.1:443",  protocol: tcp, bind_upstream: DE }
+  - { listen: "0.0.0.0:2050", target: "127.0.0.1:2050", protocol: tcp, bind_upstream: DE }
+  - { listen: "0.0.0.0:443",  target: "127.0.0.1:443",  protocol: udp, bind_upstream: DE }
+  - { listen: "0.0.0.0:8443", target: "127.0.0.1:8443", protocol: tcp, bind_upstream: FN }
+```
+
+Key points:
+
+- **Ports are preserved end-to-end** — the Iran client listens on `:PORT` and the
+  exit relay dials `127.0.0.1:PORT`. End users change **only** the server address
+  (to the Iran IP), never the port.
+- **Each exit's ports must be distinct** — routing is by destination port, so two
+  exits cannot share the same port number.
+- **No exit-server change is needed** — the exit's panel/inbound just listens on
+  the target host (`127.0.0.1` or `0.0.0.0`); the server relay already dials the
+  target the client sends.
+- **`bind_upstream` must match an `upstream.servers[].name`** — otherwise config
+  validation fails fast with a clear error.
 
 ### IPv6 (optional)
 

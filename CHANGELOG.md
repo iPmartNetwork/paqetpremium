@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.17.0] - 2026-06-22
+
+### Added
+- Multi-server per-port forwarding — the client wizard collects each exit's TCP and (optional) UDP ports and emits `forward` rules bound to that upstream (`bind_upstream`), so one Iran entry can front multiple exits with different inbounds; ports are preserved and end users change only the address. Replaces the transparent all-ports range prompt in the wizard (the `range` engine remains available in config).
+- Validation that `forward[].bind_upstream` / `range.bind_upstream` must reference an existing upstream name, failing fast with a clear error.
+
 ## [0.16.0] - 2026-06-22
 
 ### Added
@@ -111,6 +117,7 @@ installer/manager.
 - Dual transport: KCP or QUIC, selectable via `transport.protocol`.
 - SOCKS5 UDP ASSOCIATE; multi-upstream strategies and health checks; admin API, metrics, IPv6; reload/bench CLI; arm64 target.
 
+[0.17.0]: https://github.com/iPmartNetwork/paqetpremium/releases/tag/v0.17.0
 [0.16.0]: https://github.com/iPmartNetwork/paqetpremium/releases/tag/v0.16.0
 [0.9.0]: https://github.com/iPmartNetwork/paqetpremium/releases/tag/v0.9.0
 [0.8.0-dev]: https://github.com/iPmartNetwork/paqetpremium
