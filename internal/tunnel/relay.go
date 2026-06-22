@@ -71,7 +71,9 @@ func relayUDP(ctx context.Context, strm *smux.Stream, addr string) error {
 	go func() {
 		buf := make([]byte, 64*1024)
 		for {
-			_ = conn.SetReadDeadline(time.Now().Add(30 * time.Second))
+			// UDP idle timeout (target idle): allow idle-but-active sessions
+			// to stay open longer before tearing down the relay.
+			_ = conn.SetReadDeadline(time.Now().Add(60 * time.Second))
 			n, err := conn.Read(buf)
 			if err != nil {
 				errCh <- err

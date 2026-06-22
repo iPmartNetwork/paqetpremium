@@ -220,7 +220,9 @@ func (m *Manager) pumpUDP(ctx context.Context, strm *smux.Stream, conn *net.UDPC
 			return
 		default:
 		}
-		_ = strm.SetReadDeadline(time.Now().Add(8 * time.Second))
+		// UDP idle timeout (server->client): allow idle-but-active sessions
+		// (e.g. WireGuard without keepalive) to stay open longer.
+		_ = strm.SetReadDeadline(time.Now().Add(60 * time.Second))
 		n, err := protocol.ReadDatagram(strm, buf)
 		_ = strm.SetReadDeadline(time.Time{})
 		if err != nil {
