@@ -610,9 +610,9 @@ add_upstream_servers() {
       validate_ports "$stcp" && break
       warn "Invalid port list; use comma-separated numbers 1-65535."
     done
-    if ask_yes_no "  Does ${sname} have UDP ports?" "n"; then
+    if ask_yes_no "  Forward UDP ports on ${sname}? (DNS/53, WireGuard, games, QUIC)" "n"; then
       while :; do
-        prompt sudp "  UDP ports for ${sname} (comma list)" ""
+        prompt sudp "  UDP ports for ${sname} (comma list, e.g. 53,51820)" ""
         validate_ports "$sudp" && break
         warn "Invalid port list; use comma-separated numbers 1-65535."
       done
@@ -641,7 +641,13 @@ ask_range_mode() {
 }
 
 ask_client_services() {
-  prompt CFG_SOCKS_PORT "SOCKS5 listen port (blank = disabled)" ""
+  prompt CFG_SOCKS_PORT "SOCKS5 listen port (blank = disabled; TCP + UDP ASSOCIATE)" ""
+  if [[ -n "${CFG_SOCKS_PORT}" ]]; then
+    prompt CFG_SOCKS_BIND "SOCKS5 bind address (0.0.0.0 = remote clients)" "127.0.0.1"
+    info "SOCKS5 UDP is enabled automatically (DNS, games, QUIC-over-SOCKS)."
+  else
+    CFG_SOCKS_BIND="127.0.0.1"
+  fi
   prompt CFG_ADMIN "Admin API listen" "127.0.0.1:9090"
   prompt CFG_TOKEN "Admin API token (blank = none)" ""
 }
@@ -710,7 +716,12 @@ wizard_client() {
     lines+=("upstream $((i + 1))=${UP_NAMES[$i]} ${UP_IPS[$i]}:${UP_PORTS[$i]} (prio ${UP_PRIOS[$i]}, w ${UP_WEIGHTS[$i]})")
     lines+=("ports ${UP_NAMES[$i]}=tcp:${UP_TCP_PORTS[$i]:-none} udp:${UP_UDP_PORTS[$i]:-none}")
   done
-  lines+=("socks5=${CFG_SOCKS_PORT:-disabled}" "admin=${CFG_ADMIN}")
+  if [[ -n "${CFG_SOCKS_PORT}" ]]; then
+    lines+=("socks5=${CFG_SOCKS_BIND}:${CFG_SOCKS_PORT} (TCP+UDP)")
+  else
+    lines+=("socks5=disabled")
+  fi
+  lines+=("admin=${CFG_ADMIN}")
   summary_card "${lines[@]}"
   ask_yes_no "Write config and start the service?" "y" || { warn "Cancelled."; return; }
 
@@ -722,6 +733,9 @@ wizard_client() {
 
   section "Client ready"
   kv "Upstreams" "${#UP_IPS[@]} server(s), strategy ${CFG_STRATEGY}"
+  if [[ -n "${CFG_SOCKS_PORT}" ]]; then
+    kv "SOCKS5 proxy" "${C_B}${CFG_SOCKS_BIND}:${CFG_SOCKS_PORT}${C_RST}  (TCP + UDP)"
+  fi
   kv "Manage" "systemctl status ${BIN_NAME}-client | journalctl -u ${BIN_NAME}-client -f"
 }
 
@@ -745,7 +759,11 @@ wizard_add_tunnel() {
   for i in "${!UP_IPS[@]}"; do
     lines+=("ports ${UP_NAMES[$i]}=tcp:${UP_TCP_PORTS[$i]:-none} udp:${UP_UDP_PORTS[$i]:-none}")
   done
-  lines+=("socks5=${CFG_SOCKS_PORT:-disabled}")
+  if [[ -n "${CFG_SOCKS_PORT}" ]]; then
+    lines+=("socks5=${CFG_SOCKS_BIND}:${CFG_SOCKS_PORT} (TCP+UDP)")
+  else
+    lines+=("socks5=disabled")
+  fi
   summary_card "${lines[@]}"
   ask_yes_no "Write config and start instance '${name}'?" "y" || { warn "Cancelled."; return; }
 
@@ -804,6 +822,15 @@ cmd_reload()  { require_root; require_systemd; local u; u="$(resolve_unit "${1:-
 
 cmd_update() {
   require_root; require_linux
+  # Prefer a source rebuild when a checkout exists so local fixes (e.g. UDP
+  # tunneling) are picked up even before a new release binary is published.
+  if [[ "${INSTALL_MODE:-auto}" == "auto" ]] && {
+    [[ -d "${SRC_DIR}/.git" ]] ||
+    { [[ -f "./go.mod" ]] && grep -q "paqetpremium" "./go.mod" 2>/dev/null; }
+  }; then
+    info "Source tree found — rebuilding from source (INSTALL_MODE=binary to force release download)."
+    INSTALL_MODE=source
+  fi
   info "Updating ${BIN_NAME} (mode: ${INSTALL_MODE})..."
   provision_binary
   require_systemd
@@ -819,6 +846,9 @@ cmd_update() {
       systemctl is-active "${BIN_NAME}-client@${base}.service" >/dev/null 2>&1 && \
         { systemctl restart "${BIN_NAME}-client@${base}.service"; ok "Restarted ${BIN_NAME}-client@${base}"; }
     done
+  fi
+  if [[ -x "${BIN_DIR}/${BIN_NAME}" ]]; then
+    ok "Running: $(${BIN_DIR}/${BIN_NAME} version 2>/dev/null || echo "${BIN_NAME}")"
   fi
   ok "Update complete."
 }
@@ -1012,6 +1042,7 @@ Usage: sudo $0 [command] [arg]
   reload [unit] Reload config via SIGHUP
   restart[unit] Restart a service
   update        Rebuild/refresh binary and restart services
+                  (prefers source build when /opt/paqetpremium/src exists)
   uninstall     Remove services and binary
   help          Show this help
 

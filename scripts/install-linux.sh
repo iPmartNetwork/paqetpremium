@@ -7,6 +7,7 @@
 #
 # Any arguments are forwarded to install-premium.sh, e.g.:
 #   ... | sudo bash -s -- server
+#   ... | sudo bash -s -- update          # rebuild + restart (prefers source when available)
 #
 set -Eeuo pipefail
 

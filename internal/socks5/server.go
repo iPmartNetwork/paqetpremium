@@ -12,6 +12,7 @@ import (
 	"github.com/paqetpremium/paqetpremium/internal/forward"
 	"github.com/paqetpremium/paqetpremium/internal/ioext"
 	"github.com/paqetpremium/paqetpremium/internal/metrics"
+	"github.com/paqetpremium/paqetpremium/internal/protocol"
 	"github.com/paqetpremium/paqetpremium/internal/tunnelpool"
 	"github.com/txthinking/socks5"
 	"github.com/xtaci/smux"
@@ -189,6 +190,45 @@ func (h *handler) UDPHandle(s *socks5.Server, addr *net.UDPAddr, d *socks5.Datag
 	target := d.Address()
 	local := addr.String()
 
+	// QUIC datagram path (same as forward UDP).
+	if dg, ok := op.(tunnelpool.DatagramOpener); ok && dg.SupportsDatagrams() {
+		key := local + "|" + target
+		client := addr
+		deliver := func(p []byte) {
+			atyp, dstAddr, dstPort, err := socks5.ParseAddress(target)
+			if err != nil {
+				return
+			}
+			if atyp == socks5.ATYPIPv6 {
+				dstAddr = dstAddr[1:]
+			}
+			dgOut := socks5.NewDatagram(atyp, dstAddr, dstPort, p)
+			if _, err := s.UDPConn.WriteToUDP(dgOut.Bytes(), client); err != nil {
+				return
+			}
+			if h.metrics != nil {
+				h.metrics.BytesIn.Add(uint64(len(p)))
+			}
+		}
+		send, _, err := dg.OpenUDPDatagram(key, target, deliver)
+		if err != nil {
+			h.log.Warn("socks5 udp datagram open", "dest", target, "err", err)
+			return err
+		}
+		if err := send(d.Data); err != nil {
+			if h.metrics != nil {
+				h.metrics.UDPDgramDropped.Add(1)
+			}
+			return err
+		}
+		if h.metrics != nil {
+			h.metrics.UDPPackets.Add(1)
+			h.metrics.UDPDgramOut.Add(1)
+			h.metrics.BytesOut.Add(uint64(len(d.Data)))
+		}
+		return nil
+	}
+
 	strm, isNew, key, err := op.OpenUDP(local, target)
 	if err != nil {
 		h.log.Warn("socks5 udp stream", "dest", target, "err", err)
@@ -196,7 +236,7 @@ func (h *handler) UDPHandle(s *socks5.Server, addr *net.UDPAddr, d *socks5.Datag
 		return err
 	}
 
-	if _, err := strm.Write(d.Data); err != nil {
+	if err := protocol.WriteDatagram(strm, d.Data); err != nil {
 		if h.metrics != nil {
 			h.metrics.IncError()
 		}
@@ -252,8 +292,8 @@ func (h *handler) pumpUDP(s *socks5.Server, client *net.UDPAddr, target string, 
 		default:
 		}
 
-		_ = strm.SetReadDeadline(time.Now().Add(8 * time.Second))
-		n, err := strm.Read(buf)
+		_ = strm.SetReadDeadline(time.Now().Add(60 * time.Second))
+		n, err := protocol.ReadDatagram(strm, buf)
 		_ = strm.SetReadDeadline(time.Time{})
 		if err != nil {
 			return
